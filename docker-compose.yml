@@ -30,6 +30,7 @@ services:
     volumes:
       - ./model:/app/model:ro  # Mount custom trained model
       - hf_cache:/app/.cache/huggingface  # Persist HuggingFace downloads
+      - ./debug:/app/debug  # Debug output images
     command: >
       sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 

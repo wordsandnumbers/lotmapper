@@ -270,7 +270,12 @@ async def run_inference_for_project(project_id: str, user_id: str):
     This is called as a background task.
     """
     import time
+    import os
     start_time = time.time()
+
+    # Debug output directory
+    debug_dir = "/app/debug"
+    os.makedirs(debug_dir, exist_ok=True)
 
     db = SessionLocal()
     try:
@@ -309,6 +314,16 @@ async def run_inference_for_project(project_id: str, user_id: str):
         )
         logger.info(f"  Fetched image: {image_array.shape[1]}x{image_array.shape[0]} pixels in {time.time() - fetch_start:.1f}s")
 
+        # Debug: save stitched image and log coordinate grid corners
+        debug_img = Image.fromarray(image_array)
+        debug_img.save(f"{debug_dir}/stitched_{project_id}.png")
+        logger.info(f"  DEBUG: Saved stitched image to {debug_dir}/stitched_{project_id}.png")
+        logger.info(f"  DEBUG: Coord grid corners:")
+        logger.info(f"    Top-left (0,0): lon={lons[0,0]:.6f}, lat={lats_array[0,0]:.6f}")
+        logger.info(f"    Top-right (0,w): lon={lons[0,-1]:.6f}, lat={lats_array[0,-1]:.6f}")
+        logger.info(f"    Bottom-left (h,0): lon={lons[-1,0]:.6f}, lat={lats_array[-1,0]:.6f}")
+        logger.info(f"    Bottom-right (h,w): lon={lons[-1,-1]:.6f}, lat={lats_array[-1,-1]:.6f}")
+
         # Split into tiles
         logger.info(f"[Step 2/6] Splitting image into tiles...")
         tiles, rows, cols = split_image(image_array)
@@ -324,7 +339,16 @@ async def run_inference_for_project(project_id: str, user_id: str):
         logger.info(f"[Step 4/6] Stitching predictions...")
         h, w = image_array.shape[:2]
         mask = stitch_predictions(predictions, rows, cols, h, w)
-        logger.info(f"  Created mask of size {mask.shape}")
+
+        # Invert mask - base model detects roads/pavement as class 1,
+        # but we want to detect parking lots (which appear as background)
+        mask = 1 - mask
+        logger.info(f"  Created mask of size {mask.shape} (inverted)")
+
+        # Debug: save mask image
+        mask_img = Image.fromarray((mask * 255).astype(np.uint8))
+        mask_img.save(f"{debug_dir}/mask_{project_id}.png")
+        logger.info(f"  DEBUG: Saved mask to {debug_dir}/mask_{project_id}.png")
 
         # Find polygons
         logger.info(f"[Step 5/6] Extracting polygons from mask...")
@@ -345,6 +369,17 @@ async def run_inference_for_project(project_id: str, user_id: str):
             ]
 
         logger.info(f"  Converted {len(coord_polygons)} polygons to coordinates")
+
+        # Debug: log first polygon coordinates
+        if coord_polygons:
+            first_poly = coord_polygons[0]
+            coords = list(first_poly.exterior.coords)[:5]
+            logger.info(f"  DEBUG: First polygon coords (first 5): {coords}")
+
+        # Refresh database connection (may have timed out during long inference)
+        db.close()
+        db = SessionLocal()
+        project = db.query(Project).filter(Project.id == project_id).first()
 
         # Save polygons to database
         saved_count = 0

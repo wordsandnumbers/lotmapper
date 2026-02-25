@@ -41,3 +41,4 @@ model/*.ckpt
 .coverage
 htmlcov/
 .pytest_cache/
+debug/
