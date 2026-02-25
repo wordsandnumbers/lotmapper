@@ -1,21 +1,27 @@
 """
 Inference service that runs the parking lot detection model.
 Adapted from the parking-lot-mapping-tool codebase.
+Uses UTEL-UIUC/SegFormer-large-parking model.
 """
 import os
 import asyncio
 import json
 import logging
+import shutil
 from typing import List, Tuple
 import numpy as np
 import cv2
 from PIL import Image, ImageFilter
 import torch
 from torch import nn
+from torch.utils.data import Dataset, DataLoader
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from shapely.geometry import Polygon, MultiPolygon
 from shapely.ops import unary_union
+import pytorch_lightning as pl
+from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
+from huggingface_hub import hf_hub_download
 
 from app.database import SessionLocal
 from app.models.project import Project
@@ -32,59 +38,102 @@ settings = get_settings()
 _model = None
 _feature_extractor = None
 
+# Label mapping for parking lot detection
+ID2LABEL = {"0": "background", "1": "parking_lot"}
+
+
+class SegformerFinetuner(pl.LightningModule):
+    """
+    PyTorch Lightning module for SegFormer fine-tuning.
+    Adapted from parking-lot-mapping-tool/inference.py
+    """
+
+    def __init__(self, id2label, train_dataloader=None, val_dataloader=None,
+                 test_dataloader=None, metrics_interval=100):
+        super(SegformerFinetuner, self).__init__()
+        self.id2label = id2label
+        self.metrics_interval = metrics_interval
+        self.train_dl = train_dataloader
+        self.val_dl = val_dataloader
+        self.test_dl = test_dataloader
+
+        self.num_classes = len(id2label.keys())
+        self.label2id = {v: k for k, v in self.id2label.items()}
+
+        self.model = SegformerForSemanticSegmentation.from_pretrained(
+            "nvidia/segformer-b5-finetuned-cityscapes-1024-1024",
+            return_dict=False,
+            num_labels=self.num_classes,
+            id2label=self.id2label,
+            label2id=self.label2id,
+            ignore_mismatched_sizes=True,
+        )
+
+    def forward(self, images, masks):
+        outputs = self.model(pixel_values=images, labels=masks)
+        return outputs
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(
+            [p for p in self.parameters() if p.requires_grad],
+            lr=2e-05, eps=1e-08
+        )
+
 
 def get_model():
-    """Load the model lazily."""
+    """Load the parking lot detection model lazily."""
     global _model, _feature_extractor
 
     if _model is None:
         try:
-            print("[MODEL] Loading SegformerImageProcessor...", flush=True)
-            from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
+            print("[MODEL] Loading SegformerFeatureExtractor...", flush=True)
 
-            # Load image processor (formerly feature extractor)
-            _feature_extractor = SegformerImageProcessor.from_pretrained(
+            # Load feature extractor with size=512 (as per notebook)
+            _feature_extractor = SegformerFeatureExtractor.from_pretrained(
                 "nvidia/segformer-b5-finetuned-cityscapes-1024-1024"
             )
             _feature_extractor.do_reduce_labels = False
-            print("[MODEL] Image processor loaded", flush=True)
+            _feature_extractor.size = 512
+            print("[MODEL] Feature extractor loaded (size=512)", flush=True)
 
-            # Check if we have a fine-tuned model
-            if os.path.exists(settings.model_path):
-                # Load from checkpoint
-                print(f"[MODEL] Loading fine-tuned model from {settings.model_path}...", flush=True)
-                import pytorch_lightning as pl
-                from inference import SegformerFinetuner
-                id2label = {"0": "background", "1": "parking_lot"}
-                _model = SegformerFinetuner.load_from_checkpoint(
-                    settings.model_path,
-                    id2label=id2label,
-                )
-            else:
-                # Use base model for demo/development
-                print("[MODEL] No fine-tuned model found, loading base SegFormer...", flush=True)
-                _model = SegformerForSemanticSegmentation.from_pretrained(
-                    "nvidia/segformer-b5-finetuned-cityscapes-1024-1024",
-                    num_labels=2,
-                    ignore_mismatched_sizes=True,
-                )
-                print("[MODEL] Base model loaded", flush=True)
+            # Download the parking lot model from HuggingFace
+            print("[MODEL] Downloading UTEL-UIUC/SegFormer-large-parking model...", flush=True)
+            repo_id = "UTEL-UIUC/SegFormer-large-parking"
+            model_path = hf_hub_download(repo_id=repo_id, filename="best_model.ckpt")
+            print(f"[MODEL] Model downloaded to: {model_path}", flush=True)
 
-            _model.eval()
+            # Determine device
             if torch.cuda.is_available():
-                _model = _model.cuda()
-                print("[MODEL] Model moved to CUDA", flush=True)
+                device = torch.device("cuda")
+                print("[MODEL] Using CUDA", flush=True)
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                device = torch.device("mps")
+                print("[MODEL] Using MPS (Apple Silicon)", flush=True)
             else:
-                print("[MODEL] Running on CPU", flush=True)
+                device = torch.device("cpu")
+                print("[MODEL] Using CPU", flush=True)
+
+            # Load the fine-tuned model from checkpoint
+            print("[MODEL] Loading model from checkpoint...", flush=True)
+            _model = SegformerFinetuner.load_from_checkpoint(
+                model_path,
+                id2label=ID2LABEL,
+                map_location=device,
+            )
+            _model.model.to(device)
+            _model.model.eval()
+            print("[MODEL] Parking lot model loaded successfully!", flush=True)
 
         except Exception as e:
             print(f"[MODEL ERROR] Failed to load model: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
             raise
 
     return _model, _feature_extractor
 
 
-def split_image(img: np.ndarray, tile_size: int = 512) -> Tuple[List[np.ndarray], int, int]:
+def split_image(img: np.ndarray, tile_size: int = 512) -> Tuple[List[np.ndarray], int, int, int, int]:
     """Split image into tiles for inference."""
     h, w = img.shape[:2]
     tiles = []
@@ -104,18 +153,30 @@ def split_image(img: np.ndarray, tile_size: int = 512) -> Tuple[List[np.ndarray]
 
     rows = (h + tile_size - 1) // tile_size
     cols = (w + tile_size - 1) // tile_size
-    return tiles, rows, cols
+
+    # Calculate actual image dimensions after tiling
+    img_h = rows * tile_size
+    img_w = cols * tile_size
+
+    return tiles, rows, cols, img_h, img_w
 
 
 def run_model_on_tiles(tiles: List[np.ndarray]) -> List[np.ndarray]:
-    """Run inference on a list of image tiles."""
+    """Run inference on a list of image tiles using the parking lot model."""
     print("[INFERENCE] Getting model...", flush=True)
     model, feature_extractor = get_model()
     print("[INFERENCE] Model ready", flush=True)
     predictions = []
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[INFERENCE] Running on {device.upper()}", flush=True)
+    # Determine device
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+
+    print(f"[INFERENCE] Running on {device.type.upper()}", flush=True)
 
     total_tiles = len(tiles)
     print(f"[INFERENCE] Processing {total_tiles} tiles...", flush=True)
@@ -126,22 +187,19 @@ def run_model_on_tiles(tiles: List[np.ndarray]) -> List[np.ndarray]:
         # Convert to PIL Image
         pil_image = Image.fromarray(tile)
 
-        # Prepare input
-        inputs = feature_extractor(pil_image, return_tensors="pt")
-        pixel_values = inputs["pixel_values"].to(device)
+        # Prepare input using feature extractor
+        encoded = feature_extractor(pil_image, return_tensors="pt")
+        pixel_values = encoded["pixel_values"].to(device)
+
+        # Create dummy mask for forward pass (required by model but not used for inference)
+        dummy_mask = torch.zeros((1, 512, 512), dtype=torch.long).to(device)
 
         # Run inference
         with torch.no_grad():
-            if hasattr(model, 'model'):
-                # Lightning wrapper
-                outputs = model.model(pixel_values)
-                logits = outputs.logits if hasattr(outputs, 'logits') else outputs[1]
-            else:
-                # Direct model
-                outputs = model(pixel_values)
-                logits = outputs.logits
+            outputs = model.model(pixel_values, dummy_mask)
+            logits = outputs[1]  # outputs is (loss, logits)
 
-            # Upsample to original size
+            # Upsample to original tile size
             upsampled = nn.functional.interpolate(
                 logits,
                 size=(512, 512),
@@ -183,6 +241,7 @@ def stitch_predictions(
 def find_polygons(mask: np.ndarray) -> Tuple[List[Polygon], List[Polygon]]:
     """
     Extract polygons from a binary segmentation mask.
+    Adapted from parking-lot-mapping-tool/functions.py
     Returns (outer_polygons, inner_polygons).
     """
     # Apply mode filter to clean up noise
@@ -203,7 +262,7 @@ def find_polygons(mask: np.ndarray) -> Tuple[List[Polygon], List[Polygon]]:
                     poly = poly.buffer(0)
                 polygons.append(poly)
 
-    # Find and handle nested polygons
+    # Find and handle nested polygons (inner polygons)
     inner_polygons = []
     for i, polygon in enumerate(polygons):
         for j, other in enumerate(polygons):
@@ -222,7 +281,10 @@ def pixels_to_coordinates(
     lons: np.ndarray,
     lats: np.ndarray,
 ) -> List[Polygon]:
-    """Convert pixel-based polygons to geographic coordinates."""
+    """
+    Convert pixel-based polygons to geographic coordinates.
+    Adapted from parking-lot-mapping-tool/functions.py
+    """
     coord_polygons = []
 
     for poly in polygons:
@@ -270,7 +332,6 @@ async def run_inference_for_project(project_id: str, user_id: str):
     This is called as a background task.
     """
     import time
-    import os
     start_time = time.time()
 
     # Debug output directory
@@ -281,6 +342,7 @@ async def run_inference_for_project(project_id: str, user_id: str):
     try:
         logger.info(f"=" * 50)
         logger.info(f"STARTING INFERENCE FOR PROJECT {project_id}")
+        logger.info(f"Using UTEL-UIUC/SegFormer-large-parking model")
         logger.info(f"=" * 50)
 
         # Get project
@@ -325,8 +387,8 @@ async def run_inference_for_project(project_id: str, user_id: str):
         logger.info(f"    Bottom-right (h,w): lon={lons[-1,-1]:.6f}, lat={lats_array[-1,-1]:.6f}")
 
         # Split into tiles
-        logger.info(f"[Step 2/6] Splitting image into tiles...")
-        tiles, rows, cols = split_image(image_array)
+        logger.info(f"[Step 2/6] Splitting image into 512x512 tiles...")
+        tiles, rows, cols, img_h, img_w = split_image(image_array)
         logger.info(f"  Split into {len(tiles)} tiles ({rows}x{cols} grid)")
 
         # Run inference
@@ -339,11 +401,7 @@ async def run_inference_for_project(project_id: str, user_id: str):
         logger.info(f"[Step 4/6] Stitching predictions...")
         h, w = image_array.shape[:2]
         mask = stitch_predictions(predictions, rows, cols, h, w)
-
-        # Invert mask - base model detects roads/pavement as class 1,
-        # but we want to detect parking lots (which appear as background)
-        mask = 1 - mask
-        logger.info(f"  Created mask of size {mask.shape} (inverted)")
+        logger.info(f"  Created mask of size {mask.shape}")
 
         # Debug: save mask image
         mask_img = Image.fromarray((mask * 255).astype(np.uint8))
