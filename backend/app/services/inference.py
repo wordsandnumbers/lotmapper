@@ -20,7 +20,7 @@ from sqlalchemy import func
 from shapely.geometry import Polygon, MultiPolygon
 from shapely.ops import unary_union
 import pytorch_lightning as pl
-from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
+from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
 from huggingface_hub import hf_hub_download
 
 from app.database import SessionLocal
@@ -86,15 +86,15 @@ def get_model():
 
     if _model is None:
         try:
-            print("[MODEL] Loading SegformerFeatureExtractor...", flush=True)
+            print("[MODEL] Loading SegformerImageProcessor...", flush=True)
 
-            # Load feature extractor with size=512 (as per notebook)
-            _feature_extractor = SegformerFeatureExtractor.from_pretrained(
+            # Load image processor with size=512 (as per notebook)
+            _feature_extractor = SegformerImageProcessor.from_pretrained(
                 "nvidia/segformer-b5-finetuned-cityscapes-1024-1024"
             )
             _feature_extractor.do_reduce_labels = False
             _feature_extractor.size = 512
-            print("[MODEL] Feature extractor loaded (size=512)", flush=True)
+            print("[MODEL] Image processor loaded (size=512)", flush=True)
 
             # Download the parking lot model from HuggingFace
             print("[MODEL] Downloading UTEL-UIUC/SegFormer-large-parking model...", flush=True)
