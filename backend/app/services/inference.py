@@ -23,7 +23,9 @@ from app.models.polygon import Polygon as PolygonModel
 from app.services.tiles import fetch_tiles_for_bounds, calculate_optimal_zoom
 from app.config import get_settings
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 settings = get_settings()
 
 # Model will be loaded lazily
@@ -37,6 +39,7 @@ def get_model():
 
     if _model is None:
         try:
+            print("[MODEL] Loading SegformerImageProcessor...", flush=True)
             from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
 
             # Load image processor (formerly feature extractor)
@@ -44,10 +47,12 @@ def get_model():
                 "nvidia/segformer-b5-finetuned-cityscapes-1024-1024"
             )
             _feature_extractor.do_reduce_labels = False
+            print("[MODEL] Image processor loaded", flush=True)
 
             # Check if we have a fine-tuned model
             if os.path.exists(settings.model_path):
                 # Load from checkpoint
+                print(f"[MODEL] Loading fine-tuned model from {settings.model_path}...", flush=True)
                 import pytorch_lightning as pl
                 from inference import SegformerFinetuner
                 id2label = {"0": "background", "1": "parking_lot"}
@@ -57,19 +62,23 @@ def get_model():
                 )
             else:
                 # Use base model for demo/development
-                logger.warning("No fine-tuned model found, using base model")
+                print("[MODEL] No fine-tuned model found, loading base SegFormer...", flush=True)
                 _model = SegformerForSemanticSegmentation.from_pretrained(
                     "nvidia/segformer-b5-finetuned-cityscapes-1024-1024",
                     num_labels=2,
                     ignore_mismatched_sizes=True,
                 )
+                print("[MODEL] Base model loaded", flush=True)
 
             _model.eval()
             if torch.cuda.is_available():
                 _model = _model.cuda()
+                print("[MODEL] Model moved to CUDA", flush=True)
+            else:
+                print("[MODEL] Running on CPU", flush=True)
 
         except Exception as e:
-            logger.error(f"Failed to load model: {e}")
+            print(f"[MODEL ERROR] Failed to load model: {e}", flush=True)
             raise
 
     return _model, _feature_extractor
@@ -100,12 +109,20 @@ def split_image(img: np.ndarray, tile_size: int = 512) -> Tuple[List[np.ndarray]
 
 def run_model_on_tiles(tiles: List[np.ndarray]) -> List[np.ndarray]:
     """Run inference on a list of image tiles."""
+    print("[INFERENCE] Getting model...", flush=True)
     model, feature_extractor = get_model()
+    print("[INFERENCE] Model ready", flush=True)
     predictions = []
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"[INFERENCE] Running on {device.upper()}", flush=True)
 
-    for tile in tiles:
+    total_tiles = len(tiles)
+    print(f"[INFERENCE] Processing {total_tiles} tiles...", flush=True)
+
+    for idx, tile in enumerate(tiles):
+        print(f"[INFERENCE] Tile {idx + 1}/{total_tiles} ({((idx + 1) / total_tiles * 100):.1f}%)", flush=True)
+
         # Convert to PIL Image
         pil_image = Image.fromarray(tile)
 
@@ -134,6 +151,7 @@ def run_model_on_tiles(tiles: List[np.ndarray]) -> List[np.ndarray]:
             pred = upsampled.argmax(dim=1).cpu().numpy()[0]
             predictions.append(pred)
 
+    logger.info(f"Completed inference on all {total_tiles} tiles")
     return predictions
 
 
@@ -251,8 +269,15 @@ async def run_inference_for_project(project_id: str, user_id: str):
     Run the full inference pipeline for a project.
     This is called as a background task.
     """
+    import time
+    start_time = time.time()
+
     db = SessionLocal()
     try:
+        logger.info(f"=" * 50)
+        logger.info(f"STARTING INFERENCE FOR PROJECT {project_id}")
+        logger.info(f"=" * 50)
+
         # Get project
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
@@ -270,38 +295,44 @@ async def run_inference_for_project(project_id: str, user_id: str):
         min_lng, max_lng = min(lngs), max(lngs)
         min_lat, max_lat = min(lats), max(lats)
 
-        logger.info(f"Fetching tiles for project {project_id}")
-        logger.info(f"Bounds: {min_lat}, {min_lng}, {max_lat}, {max_lng}")
+        logger.info(f"[Step 1/6] Fetching satellite tiles...")
+        logger.info(f"  Bounds: {min_lat:.4f}, {min_lng:.4f} to {max_lat:.4f}, {max_lng:.4f}")
 
         # Calculate optimal zoom
         zoom = calculate_optimal_zoom(min_lat, min_lng, max_lat, max_lng)
-        logger.info(f"Using zoom level {zoom}")
+        logger.info(f"  Using zoom level {zoom}")
 
         # Fetch tiles
+        fetch_start = time.time()
         image_array, lons, lats_array = await fetch_tiles_for_bounds(
             min_lat, min_lng, max_lat, max_lng, zoom
         )
-
-        logger.info(f"Fetched image of size {image_array.shape}")
+        logger.info(f"  Fetched image: {image_array.shape[1]}x{image_array.shape[0]} pixels in {time.time() - fetch_start:.1f}s")
 
         # Split into tiles
+        logger.info(f"[Step 2/6] Splitting image into tiles...")
         tiles, rows, cols = split_image(image_array)
-        logger.info(f"Split into {len(tiles)} tiles ({rows}x{cols})")
+        logger.info(f"  Split into {len(tiles)} tiles ({rows}x{cols} grid)")
 
         # Run inference
-        logger.info("Running model inference...")
+        logger.info(f"[Step 3/6] Running model inference on {len(tiles)} tiles...")
+        inference_start = time.time()
         predictions = run_model_on_tiles(tiles)
+        logger.info(f"  Inference completed in {time.time() - inference_start:.1f}s")
 
         # Stitch predictions
+        logger.info(f"[Step 4/6] Stitching predictions...")
         h, w = image_array.shape[:2]
         mask = stitch_predictions(predictions, rows, cols, h, w)
-        logger.info(f"Stitched mask of size {mask.shape}")
+        logger.info(f"  Created mask of size {mask.shape}")
 
         # Find polygons
+        logger.info(f"[Step 5/6] Extracting polygons from mask...")
         outer_polygons, inner_polygons = find_polygons(mask)
-        logger.info(f"Found {len(outer_polygons)} outer polygons, {len(inner_polygons)} inner")
+        logger.info(f"  Found {len(outer_polygons)} outer polygons, {len(inner_polygons)} inner polygons")
 
         # Convert to coordinates
+        logger.info(f"[Step 6/6] Converting to geographic coordinates...")
         coord_polygons = pixels_to_coordinates(outer_polygons, lons, lats_array)
         inner_coord_polygons = pixels_to_coordinates(inner_polygons, lons, lats_array)
 
@@ -313,9 +344,10 @@ async def run_inference_for_project(project_id: str, user_id: str):
                 for p in coord_polygons
             ]
 
-        logger.info(f"Converted {len(coord_polygons)} polygons to coordinates")
+        logger.info(f"  Converted {len(coord_polygons)} polygons to coordinates")
 
         # Save polygons to database
+        saved_count = 0
         for poly in coord_polygons:
             if poly.is_empty:
                 continue
@@ -328,12 +360,19 @@ async def run_inference_for_project(project_id: str, user_id: str):
                 properties={},
             )
             db.add(db_polygon)
+            saved_count += 1
 
         # Update project status
         project.status = "review"
         db.commit()
 
-        logger.info(f"Inference complete for project {project_id}")
+        total_time = time.time() - start_time
+        logger.info(f"=" * 50)
+        logger.info(f"INFERENCE COMPLETE")
+        logger.info(f"  Project: {project_id}")
+        logger.info(f"  Polygons saved: {saved_count}")
+        logger.info(f"  Total time: {total_time:.1f}s")
+        logger.info(f"=" * 50)
 
     except Exception as e:
         logger.error(f"Inference failed for project {project_id}: {e}")

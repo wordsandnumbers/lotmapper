@@ -23,11 +23,13 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/parking_lots
       - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
       - CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
+      - HF_HOME=/app/.cache/huggingface
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./model:/app/model:ro  # Mount model files
+      - ./model:/app/model:ro  # Mount custom trained model
+      - hf_cache:/app/.cache/huggingface  # Persist HuggingFace downloads
     command: >
       sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
@@ -40,3 +42,4 @@ services:
 
 volumes:
   postgres_data:
+  hf_cache:  # Persist HuggingFace model downloads
