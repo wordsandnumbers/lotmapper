@@ -1,0 +1,40 @@
+# FastAPI and server
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# Database
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+geoalchemy2==0.14.3
+alembic==1.13.1
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+
+# Validation and settings
+pydantic==2.6.1
+pydantic-settings==2.1.0
+email-validator==2.1.0
+
+# GeoJSON and spatial
+shapely==2.0.2
+geojson==3.1.0
+
+# HTTP client for tile fetching
+httpx==0.26.0
+aiofiles==23.2.1
+
+# Image processing (for inference)
+pillow==10.2.0
+numpy==1.26.4
+opencv-python-headless==4.9.0.80
+
+# Model inference (from existing project)
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.36.0
+pytorch-lightning>=2.0.0
+evaluate>=0.4.0
