@@ -127,26 +127,21 @@ async def fetch_tiles_for_bounds(
 
 def calculate_optimal_zoom(min_lat: float, min_lng: float, max_lat: float, max_lng: float) -> int:
     """
+    TODO: remove zoom, we should always use the highest zoom level (19) for best parking lot detection results.
     Calculate optimal zoom level based on area size.
     Higher zoom = more detail but more tiles to fetch.
+
+    Note: Parking lot detection model requires zoom 18+ for accurate results.
+    We enforce minimum zoom of 18 even for larger areas.
     """
     # Approximate area size in degrees
     lat_span = abs(max_lat - min_lat)
     lng_span = abs(max_lng - min_lng)
-
-    # For small areas (< 0.01 degrees ≈ 1km), use high zoom
-    # For larger areas, use lower zoom to limit tile count
     max_span = max(lat_span, lng_span)
 
+    # For very small areas, use zoom 19
     if max_span < 0.005:
         return 19
-    elif max_span < 0.01:
-        return 18
-    elif max_span < 0.02:
-        return 17
-    elif max_span < 0.05:
-        return 16
-    elif max_span < 0.1:
-        return 15
     else:
-        return 14
+        # For all other areas, use zoom 18 (minimum for parking lot detection)
+        return 18
