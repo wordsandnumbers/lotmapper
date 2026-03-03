@@ -11,10 +11,7 @@ interface Project {
   name: string
   description: string | null
   status: string
-  bounds: {
-    type: string
-    coordinates: number[][][]
-  }
+  bounds: GeoJSON.Polygon
 }
 
 interface GeoJSONFeatureCollection {
@@ -52,6 +49,8 @@ export default function Editor() {
   const [selectedPolygonId, setSelectedPolygonId] = useState<string | null>(null)
   const [splitMode, setSplitMode] = useState(false)
   const [splitStart, setSplitStart] = useState<[number, number] | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const featureGroupRef = useRef<L.FeatureGroup>(null)
   const geoJsonRef = useRef<L.GeoJSON>(null)
@@ -217,6 +216,20 @@ export default function Editor() {
     }
   }
 
+  const handleDeleteProject = async () => {
+    if (!projectId) return
+    setDeleting(true)
+    try {
+      await projectsApi.delete(projectId)
+      navigate('/dashboard')
+    } catch (error) {
+      console.error('Failed to delete project:', error)
+      alert('Failed to delete project. Please try again.')
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
   if (loading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>
   }
@@ -357,6 +370,39 @@ export default function Editor() {
               Submit for Review
             </button>
           )}
+
+          {user?.role === 'admin' && (
+            <div className="border-t pt-3 mt-3">
+              {showDeleteConfirm ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">Delete this project and all its polygons?</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleDeleteProject}
+                      disabled={deleting}
+                      className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+                    >
+                      {deleting ? 'Deleting...' : 'Confirm Delete'}
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      disabled={deleting}
+                      className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="w-full bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-md text-sm"
+                >
+                  Delete Project
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Polygon count */}
@@ -381,6 +427,17 @@ export default function Editor() {
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
           />
           <FitBounds bounds={mapBounds} />
+
+          {/* Project boundary outline (non-editable) */}
+          <GeoJSON
+            data={project.bounds}
+            style={{
+              color: '#fbbf24',
+              weight: 3,
+              fillOpacity: 0,
+              dashArray: '5, 5',
+            }}
+          />
 
           {/* Editable polygons */}
           <FeatureGroup ref={featureGroupRef}>
