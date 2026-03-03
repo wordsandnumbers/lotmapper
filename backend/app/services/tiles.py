@@ -11,6 +11,7 @@ from PIL import Image
 from io import BytesIO
 
 from app.config import get_settings
+from app.services.tile_cache import get_cached_tile, cache_tile
 
 
 # Module-level session cache
@@ -76,11 +77,16 @@ def get_tile_bounds(x: int, y: int, zoom: int) -> Tuple[float, float, float, flo
 
 
 async def fetch_tile(client: httpx.AsyncClient, x: int, y: int, zoom: int, session_token: str) -> Image.Image:
-    """Fetch a single tile from Google Maps Tile API."""
+    """Fetch a single tile, returning from cache if available."""
+    cached = get_cached_tile(zoom, x, y)
+    if cached:
+        return Image.open(BytesIO(cached))
+
     settings = get_settings()
     url = f"https://tile.googleapis.com/v1/2dtiles/{zoom}/{x}/{y}?session={session_token}&key={settings.google_maps_api_key}"
     response = await client.get(url)
     response.raise_for_status()
+    cache_tile(zoom, x, y, response.content)
     return Image.open(BytesIO(response.content))
 
 

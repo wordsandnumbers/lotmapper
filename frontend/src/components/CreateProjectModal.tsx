@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
-import { projectsApi, mapsApi } from '../services/api'
+import { projectsApi } from '../services/api'
 
 interface Props {
   onClose: () => void
@@ -156,7 +156,6 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [statesGeoJson, setStatesGeoJson] = useState<GeoJSON.FeatureCollection | null>(null)
-  const [tileUrl, setTileUrl] = useState<string | null>(null)
 
   // Load US states GeoJSON
   useEffect(() => {
@@ -166,9 +165,6 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
       .catch(err => console.error('Failed to load states:', err))
   }, [])
 
-  useEffect(() => {
-    mapsApi.getTileUrl().then(setTileUrl).catch(console.error)
-  }, [])
 
   const handleBoundsSelected = (newBounds: { min_lat: number; min_lng: number; max_lat: number; max_lng: number } | null) => {
     setBounds(newBounds)
@@ -277,7 +273,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                 >
                   <TileLayer
                     attribution='&copy; <a href="https://maps.google.com">Google Maps</a>'
-                    url={tileUrl ?? "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"}
+                    url="/api/v1/tiles/{z}/{x}/{y}"
                   />
                   {statesGeoJson && (
                     <GeoJSON data={statesGeoJson} style={statesStyle} />
