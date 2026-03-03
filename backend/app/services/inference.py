@@ -391,10 +391,11 @@ async def run_inference_for_project(project_id: str, user_id: str):
         tiles, rows, cols, img_h, img_w = split_image(image_array)
         logger.info(f"  Split into {len(tiles)} tiles ({rows}x{cols} grid)")
 
-        # Run inference
+        # Run inference in a thread pool so the event loop stays free for other requests
         logger.info(f"[Step 3/6] Running model inference on {len(tiles)} tiles...")
         inference_start = time.time()
-        predictions = run_model_on_tiles(tiles)
+        loop = asyncio.get_event_loop()
+        predictions = await loop.run_in_executor(None, run_model_on_tiles, tiles)
         logger.info(f"  Inference completed in {time.time() - inference_start:.1f}s")
 
         # Stitch predictions
