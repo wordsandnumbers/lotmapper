@@ -24,6 +24,7 @@ services:
       - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
       - CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
       - HF_HOME=/app/.cache/huggingface
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
     depends_on:
       db:
         condition: service_healthy

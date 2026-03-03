@@ -1,17 +1,53 @@
 """
-Service for fetching satellite tiles from ESRI World Imagery.
+Service for fetching satellite tiles from Google Maps Tile API.
 """
 import math
+import time
 import asyncio
-from typing import Tuple, List
+from typing import Tuple
 import httpx
 import numpy as np
 from PIL import Image
 from io import BytesIO
 
+from app.config import get_settings
 
-# ESRI World Imagery tile server
-ESRI_TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+
+# Module-level session cache
+_session_cache: dict = {"token": None, "expiry": 0}
+
+
+async def _create_google_maps_session() -> str:
+    """Create a new Google Maps session token."""
+    settings = get_settings()
+    url = f"https://tile.googleapis.com/v1/createSession?key={settings.google_maps_api_key}"
+    body = {"mapType": "satellite", "language": "en-US", "region": "US"}
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(url, json=body)
+        if not response.is_success:
+            raise RuntimeError(
+                f"Google Maps createSession failed {response.status_code}: {response.text}"
+            )
+        data = response.json()
+    token = data["session"]
+    expiry = data.get("expiry", int(time.time()) + 3600)
+    _session_cache["token"] = token
+    _session_cache["expiry"] = int(expiry)
+    return token
+
+
+async def _get_current_session() -> str:
+    """Return a valid session token, refreshing if within 60s of expiry."""
+    if _session_cache["token"] is None or time.time() >= _session_cache["expiry"] - 60:
+        return await _create_google_maps_session()
+    return _session_cache["token"]
+
+
+async def get_google_maps_tile_url() -> str:
+    """Return a Leaflet-compatible tile URL template with a valid session token."""
+    settings = get_settings()
+    token = await _get_current_session()
+    return f"https://tile.googleapis.com/v1/2dtiles/{{z}}/{{x}}/{{y}}?session={token}&key={settings.google_maps_api_key}"
 
 
 def lat_lng_to_tile(lat: float, lng: float, zoom: int) -> Tuple[int, int]:
@@ -39,9 +75,10 @@ def get_tile_bounds(x: int, y: int, zoom: int) -> Tuple[float, float, float, flo
     return se_lat, nw_lng, nw_lat, se_lng  # min_lat, min_lng, max_lat, max_lng
 
 
-async def fetch_tile(client: httpx.AsyncClient, x: int, y: int, zoom: int) -> Image.Image:
-    """Fetch a single tile from ESRI."""
-    url = ESRI_TILE_URL.format(z=zoom, x=x, y=y)
+async def fetch_tile(client: httpx.AsyncClient, x: int, y: int, zoom: int, session_token: str) -> Image.Image:
+    """Fetch a single tile from Google Maps Tile API."""
+    settings = get_settings()
+    url = f"https://tile.googleapis.com/v1/2dtiles/{zoom}/{x}/{y}?session={session_token}&key={settings.google_maps_api_key}"
     response = await client.get(url)
     response.raise_for_status()
     return Image.open(BytesIO(response.content))
@@ -63,6 +100,8 @@ async def fetch_tiles_for_bounds(
         - lons_array: 2D array of longitude values for each pixel
         - lats_array: 2D array of latitude values for each pixel
     """
+    session_token = await _get_current_session()
+
     # Get tile range
     min_x, max_y = lat_lng_to_tile(min_lat, min_lng, zoom)
     max_x, min_y = lat_lng_to_tile(max_lat, max_lng, zoom)
@@ -85,7 +124,7 @@ async def fetch_tiles_for_bounds(
         tasks = []
         for y in range(min_y, max_y + 1):
             for x in range(min_x, max_x + 1):
-                tasks.append(fetch_tile(client, x, y, zoom))
+                tasks.append(fetch_tile(client, x, y, zoom, session_token))
 
         tiles = await asyncio.gather(*tasks)
 

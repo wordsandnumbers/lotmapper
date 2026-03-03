@@ -109,6 +109,14 @@ export const polygonsApi = {
   },
 }
 
+// Maps API
+export const mapsApi = {
+  getTileUrl: async (): Promise<string> => {
+    const response = await api.get('/maps/tile-url')
+    return response.data.url
+  },
+}
+
 // Inference API
 export const inferenceApi = {
   run: async (projectId: string) => {

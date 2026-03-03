@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, GeoJSON, FeatureGroup, useMap } from 'react-leaflet'
 import { EditControl } from 'react-leaflet-draw'
 import L from 'leaflet'
-import { projectsApi, polygonsApi, inferenceApi } from '../services/api'
+import { projectsApi, polygonsApi, inferenceApi, mapsApi } from '../services/api'
 import { useAuthStore } from '../store/auth'
 
 interface Project {
@@ -51,6 +51,7 @@ export default function Editor() {
   const [splitStart, setSplitStart] = useState<[number, number] | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [tileUrl, setTileUrl] = useState<string | null>(null)
 
   const featureGroupRef = useRef<L.FeatureGroup>(null)
   const geoJsonRef = useRef<L.GeoJSON>(null)
@@ -75,6 +76,10 @@ export default function Editor() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  useEffect(() => {
+    mapsApi.getTileUrl().then(setTileUrl).catch(console.error)
+  }, [])
 
   // Polling for processing status
   useEffect(() => {
@@ -423,8 +428,8 @@ export default function Editor() {
           style={{ height: '100%', width: '100%' }}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            attribution='&copy; <a href="https://maps.google.com">Google Maps</a>'
+            url={tileUrl ?? "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"}
           />
           <FitBounds bounds={mapBounds} />
 

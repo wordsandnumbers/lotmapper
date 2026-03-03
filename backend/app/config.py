@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Model paths (relative to backend directory)
     model_path: str = "../model/parking_lot_model.pt"
 
+    # Google Maps
+    google_maps_api_key: str = ""
+
     class Config:
         env_file = ".env"
         extra = "ignore"
