@@ -61,8 +61,13 @@ async def create_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Create a new project with a bounding box."""
-    bounds_wkt = bounds_to_polygon_wkt(project_data.bounds)
+    """Create a new project with a bounding box or polygon."""
+    if project_data.bounds_polygon:
+        from shapely.geometry import shape
+        poly = shape(project_data.bounds_polygon)
+        bounds_wkt = f"SRID=4326;{poly.wkt}"
+    else:
+        bounds_wkt = bounds_to_polygon_wkt(project_data.bounds)
 
     project = Project(
         name=project_data.name,

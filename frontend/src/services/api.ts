@@ -50,6 +50,14 @@ export const authApi = {
   },
 }
 
+// Cities API
+export const citiesApi = {
+  resolve: async (city: string, state: string) =>
+    api.get('/cities/resolve', { params: { city, state } }).then(r => r.data),
+  candidates: async (city: string, state: string) =>
+    api.get('/cities/candidates', { params: { city, state } }).then(r => r.data),
+}
+
 // Projects API
 export const projectsApi = {
   list: async (status?: string) => {
@@ -64,7 +72,8 @@ export const projectsApi = {
   create: async (data: {
     name: string
     description?: string
-    bounds: { min_lat: number; min_lng: number; max_lat: number; max_lng: number }
+    bounds?: { min_lat: number; min_lng: number; max_lat: number; max_lng: number }
+    bounds_polygon?: object
   }) => {
     const response = await api.post('/projects', data)
     return response.data

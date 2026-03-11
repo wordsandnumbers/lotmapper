@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class BoundingBox(BaseModel):
@@ -15,7 +15,14 @@ class BoundingBox(BaseModel):
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    bounds: BoundingBox  # Will be converted to polygon
+    bounds: Optional[BoundingBox] = None        # manual draw → rectangle
+    bounds_polygon: Optional[dict] = None       # city resolver → arbitrary polygon
+
+    @model_validator(mode="after")
+    def require_one_bounds(self):
+        if not self.bounds and not self.bounds_polygon:
+            raise ValueError("Either bounds or bounds_polygon is required")
+        return self
 
 
 class ProjectUpdate(BaseModel):

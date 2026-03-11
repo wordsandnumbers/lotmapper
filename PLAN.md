@@ -7,7 +7,7 @@ A multi-user web application for generating and editing parking lot GeoJSON from
 - **Backend**: FastAPI (Python 3.11+)
 - **Frontend**: React 18 + TypeScript + Vite
 - **Database**: PostgreSQL 15 + PostGIS
-- **Maps**: Leaflet + ESRI World Imagery
+- **Maps**: Google Maps satellite tiles (proxied via backend)
 - **Auth**: JWT tokens + RBAC
 - **Containerization**: Docker Compose
 
@@ -93,7 +93,7 @@ CREATE TABLE projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    bounds GEOMETRY(POLYGON, 4326) NOT NULL,  -- bounding box
+    bounds GEOMETRY(GEOMETRY, 4326) NOT NULL,  -- polygon or multipolygon boundary
     status VARCHAR(50) DEFAULT 'pending',  -- pending, processing, review, approved
     created_by UUID REFERENCES users(id),
     approved_by UUID REFERENCES users(id),
@@ -129,38 +129,42 @@ CREATE TABLE polygon_history (
 ## Phase 2: Backend Implementation
 
 ### 2.1 Core Setup
-- [ ] Initialize FastAPI project with proper structure
-- [ ] Configure PostgreSQL + PostGIS connection (GeoAlchemy2)
-- [ ] Set up Alembic for migrations
-- [ ] Environment configuration (.env)
+- [x] Initialize FastAPI project with proper structure
+- [x] Configure PostgreSQL + PostGIS connection (GeoAlchemy2)
+- [x] Set up Alembic for migrations
+- [x] Environment configuration (.env)
 
 ### 2.2 Authentication & Authorization
-- [ ] User registration endpoint
-- [ ] Login endpoint (returns JWT)
-- [ ] JWT validation middleware
-- [ ] RBAC permission decorators
-- [ ] Admin endpoints for user management (activate, change role)
+- [x] User registration endpoint
+- [x] Login endpoint (returns JWT)
+- [x] JWT validation middleware
+- [x] RBAC permission decorators
+- [x] Admin endpoints for user management (activate, change role)
 
 ### 2.3 Project Management
-- [ ] Create project (define bounding box)
-- [ ] List projects (with status filters)
-- [ ] Get project details
-- [ ] Update project status
-- [ ] Delete project (admin only)
+- [x] Create project (define boundary polygon or multipolygon)
+- [x] List projects (with status filters)
+- [x] Get project details
+- [x] Update project status
+- [x] Delete project (admin only)
 
 ### 2.4 Model Inference
-- [ ] Adapt existing inference code from parking-lot-mapping-tool
-- [ ] Endpoint to trigger inference for a project
-- [ ] Fetch ESRI tiles for bounding box
-- [ ] Run model and save results to DB
-- [ ] Background job support (long-running inference)
+- [x] Adapt existing inference code from parking-lot-mapping-tool (UTEL-UIUC/SegFormer-large-parking)
+- [x] Endpoint to trigger inference for a project
+- [x] Fetch Google Maps satellite tiles for bounding box (with local file cache)
+- [x] Run model and save results to DB
+- [x] Background job support (runs in thread pool executor)
+- [x] Pre-filter tiles to skip those outside project boundary (efficiency)
+- [x] Post-clip detected polygons to project boundary (correctness)
+- [x] OSM road/building subtraction post-processing
+- [x] Polygon simplification
 
 ### 2.5 Polygon CRUD
-- [ ] Get all polygons for a project (as GeoJSON)
-- [ ] Update polygon geometry (edit)
-- [ ] Delete polygon (soft delete)
-- [ ] Create new polygon (manual add)
-- [ ] Split polygon into two
+- [x] Get all polygons for a project (as GeoJSON)
+- [x] Update polygon geometry (edit)
+- [x] Delete polygon (soft delete)
+- [x] Create new polygon (manual add)
+- [x] Split polygon into two
 - [ ] Polygon history/audit trail
 
 ---
@@ -168,60 +172,61 @@ CREATE TABLE polygon_history (
 ## Phase 3: Frontend Implementation
 
 ### 3.1 Core Setup
-- [ ] Initialize React + TypeScript + Vite project
-- [ ] Configure routing (React Router)
-- [ ] Set up API client (axios/fetch)
-- [ ] Auth state management (context/zustand)
-- [ ] Protected route wrapper
+- [x] Initialize React + TypeScript + Vite project
+- [x] Configure routing (React Router)
+- [x] Set up API client (fetch)
+- [x] Auth state management (zustand)
+- [x] Protected route wrapper
 
 ### 3.2 Authentication UI
-- [ ] Login page
-- [ ] Registration page
-- [ ] "Awaiting approval" state handling
+- [x] Login page
+- [x] Registration page
+- [x] "Awaiting approval" state handling
 
 ### 3.3 Dashboard
-- [ ] Project list view
-- [ ] Create new project (draw bounding box on map)
-- [ ] Project status indicators
+- [x] Project list view
+- [x] Create new project (draw polygon/multipolygon boundary on Google Maps)
+- [x] Project status indicators
 - [ ] Filter/search projects
 
 ### 3.4 Map Editor
-- [ ] Leaflet map with ESRI World Imagery
-- [ ] Display polygons from GeoJSON
-- [ ] Leaflet.draw integration for editing:
-  - [ ] Select and edit polygon vertices
-  - [ ] Delete selected polygon
-  - [ ] Draw new polygon
-  - [ ] Split polygon (draw line through existing)
-- [ ] Save changes to backend
+- [x] Leaflet map with Google Maps satellite tiles
+- [x] Display polygons from GeoJSON
+- [x] Project boundary outline overlay
+- [x] Leaflet.draw integration for editing:
+  - [x] Select and edit polygon vertices
+  - [x] Delete selected polygon
+  - [x] Draw new polygon
+  - [x] Split polygon (draw line through existing)
+- [x] Save changes to backend
 - [ ] Undo/redo support
-- [ ] Submit for approval button
+- [x] Submit for approval button
 
 ### 3.5 Admin Panel
-- [ ] User list
-- [ ] Activate/deactivate users
-- [ ] Change user roles
-- [ ] Create new users
+- [x] User list
+- [x] Activate/deactivate users
+- [x] Change user roles
+- [x] Create new users
 
 ---
 
 ## Phase 4: Integration & Polish
 
 ### 4.1 Model Integration
-- [ ] Copy/adapt model files from parking-lot-mapping-tool
-- [ ] Test inference pipeline end-to-end
-- [ ] Handle large areas (tile chunking)
+- [x] Adapt model from parking-lot-mapping-tool (UTEL-UIUC/SegFormer-large-parking)
+- [x] Test inference pipeline end-to-end
+- [x] Handle large areas (512px tile chunking)
 
 ### 4.2 Docker Setup
-- [ ] Backend Dockerfile
-- [ ] Frontend Dockerfile (nginx for production)
-- [ ] docker-compose.yml with all services
-- [ ] Volume mounts for model files
+- [x] Backend Dockerfile
+- [x] Frontend Dockerfile (nginx for production)
+- [x] docker-compose.yml with all services
+- [x] Volume mounts for model files
 
 ### 4.3 Production Readiness
-- [ ] Environment variable configuration
-- [ ] CORS configuration
-- [ ] Error handling & logging
+- [x] Environment variable configuration
+- [x] CORS configuration
+- [x] Error handling & logging
 - [ ] Basic rate limiting
 - [ ] Health check endpoints
 
@@ -243,8 +248,12 @@ CREATE TABLE polygon_history (
 ---
 
 ## Questions/Decisions Made
-- ESRI World Imagery for satellite tiles (free, good quality)
+- Google Maps satellite tiles via backend proxy (with local file cache)
 - JWT-based auth (stateless, scales well)
 - PostGIS for spatial data (industry standard)
 - Soft deletes for polygons (audit trail)
 - Admin approval required for new user accounts
+- Project bounds stored as `GEOMETRY` to support both Polygon and MultiPolygon
+- Inference runs in thread pool executor to keep event loop free
+- Tile pre-filter skips model inference on tiles outside project boundary
+- Detected polygons post-clipped to project boundary for correctness

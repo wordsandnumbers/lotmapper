@@ -13,7 +13,7 @@ class Project(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    bounds = Column(Geometry("POLYGON", srid=4326), nullable=False)
+    bounds = Column(Geometry("GEOMETRY", srid=4326), nullable=False)
     status = Column(
         String(50), default="pending"
     )  # pending, processing, review, approved

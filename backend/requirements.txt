@@ -22,6 +22,7 @@ email-validator==2.1.0
 # GeoJSON and spatial
 shapely==2.0.2
 geojson==3.1.0
+pyproj>=3.6.0
 
 # HTTP client for tile fetching
 httpx==0.26.0

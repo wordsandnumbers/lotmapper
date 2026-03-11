@@ -11,7 +11,7 @@ interface Project {
   name: string
   description: string | null
   status: string
-  bounds: GeoJSON.Polygon
+  bounds: GeoJSON.Polygon | GeoJSON.MultiPolygon
 }
 
 interface GeoJSONFeatureCollection {
@@ -239,10 +239,14 @@ export default function Editor() {
     return <div className="flex items-center justify-center h-screen">Project not found</div>
   }
 
-  // Calculate bounds for map fitting
-  const coords = project.bounds.coordinates[0]
-  const lngs = coords.map((c) => c[0])
-  const lats = coords.map((c) => c[1])
+  // Calculate bounds for map fitting — handle both Polygon and MultiPolygon
+  const allRings =
+    project.bounds.type === 'MultiPolygon'
+      ? (project.bounds.coordinates as number[][][][]).flat()
+      : [(project.bounds.coordinates as number[][][])[0]]
+  const allCoords = allRings.flat()
+  const lngs = allCoords.map((c) => c[0])
+  const lats = allCoords.map((c) => c[1])
   const mapBounds: L.LatLngBoundsExpression = [
     [Math.min(...lats), Math.min(...lngs)],
     [Math.max(...lats), Math.max(...lngs)],

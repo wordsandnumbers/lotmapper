@@ -17,7 +17,7 @@ from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Polygon, MultiPolygon, shape, box
 from shapely.ops import unary_union
 import pytorch_lightning as pl
 from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
@@ -27,6 +27,7 @@ from app.database import SessionLocal
 from app.models.project import Project
 from app.models.polygon import Polygon as PolygonModel
 from app.services.tiles import fetch_tiles_for_bounds, calculate_optimal_zoom
+from app.services.osm import fetch_osm_roads, fetch_osm_buildings, subtract_features, simplify_polygons
 from app.config import get_settings
 
 logging.basicConfig(level=logging.INFO)
@@ -354,15 +355,18 @@ async def run_inference_for_project(project_id: str, user_id: str):
         # Get bounds from project geometry
         bounds_geojson = db.execute(func.ST_AsGeoJSON(project.bounds)).scalar()
         bounds = json.loads(bounds_geojson)
-        coords = bounds["coordinates"][0]
 
-        # Extract min/max lat/lng
-        lngs = [c[0] for c in coords]
-        lats = [c[1] for c in coords]
+        # Extract all points regardless of Polygon vs MultiPolygon
+        if bounds["type"] == "MultiPolygon":
+            all_points = [pt for poly in bounds["coordinates"] for ring in poly for pt in ring]
+        else:
+            all_points = [pt for ring in bounds["coordinates"] for pt in ring]
+        lngs = [c[0] for c in all_points]
+        lats = [c[1] for c in all_points]
         min_lng, max_lng = min(lngs), max(lngs)
         min_lat, max_lat = min(lats), max(lats)
 
-        logger.info(f"[Step 1/6] Fetching satellite tiles...")
+        logger.info(f"[Step 1/8] Fetching satellite tiles...")
         logger.info(f"  Bounds: {min_lat:.4f}, {min_lng:.4f} to {max_lat:.4f}, {max_lng:.4f}")
 
         # Calculate optimal zoom
@@ -387,19 +391,50 @@ async def run_inference_for_project(project_id: str, user_id: str):
         logger.info(f"    Bottom-right (h,w): lon={lons[-1,-1]:.6f}, lat={lats_array[-1,-1]:.6f}")
 
         # Split into tiles
-        logger.info(f"[Step 2/6] Splitting image into 512x512 tiles...")
+        logger.info(f"[Step 2/8] Splitting image into 512x512 tiles...")
         tiles, rows, cols, img_h, img_w = split_image(image_array)
         logger.info(f"  Split into {len(tiles)} tiles ({rows}x{cols} grid)")
 
+        # Pre-filter: skip inference on tiles that don't intersect the project boundary.
+        boundary_shape = shape(bounds)
+        h_px, w_px = lons.shape
+        tile_size = 512
+
+        tiles_active = []
+        for idx in range(len(tiles)):
+            row_idx = idx // cols
+            col_idx = idx % cols
+            y0 = row_idx * tile_size
+            x0 = col_idx * tile_size
+            y1 = min(y0 + tile_size, h_px) - 1
+            x1 = min(x0 + tile_size, w_px) - 1
+            corner_lons = [lons[y0, x0], lons[y0, x1], lons[y1, x0], lons[y1, x1]]
+            corner_lats = [lats_array[y0, x0], lats_array[y0, x1],
+                           lats_array[y1, x0], lats_array[y1, x1]]
+            tile_box = box(min(corner_lons), min(corner_lats),
+                           max(corner_lons), max(corner_lats))
+            tiles_active.append(boundary_shape.intersects(tile_box))
+
+        active_indices = [i for i, a in enumerate(tiles_active) if a]
+        active_tiles = [tiles[i] for i in active_indices]
+        skipped = len(tiles) - len(active_tiles)
+        logger.info(f"  Tile pre-filter: {len(active_tiles)}/{len(tiles)} tiles intersect boundary "
+                    f"({skipped} skipped)")
+
         # Run inference in a thread pool so the event loop stays free for other requests
-        logger.info(f"[Step 3/6] Running model inference on {len(tiles)} tiles...")
+        logger.info(f"[Step 3/8] Running model inference on {len(active_tiles)} tiles...")
         inference_start = time.time()
         loop = asyncio.get_event_loop()
-        predictions = await loop.run_in_executor(None, run_model_on_tiles, tiles)
+        active_predictions = await loop.run_in_executor(None, run_model_on_tiles, active_tiles)
         logger.info(f"  Inference completed in {time.time() - inference_start:.1f}s")
 
+        # Reconstruct full predictions list (zero mask for skipped tiles)
+        predictions = [np.zeros((tile_size, tile_size), dtype=np.uint8)] * len(tiles)
+        for i, pred in zip(active_indices, active_predictions):
+            predictions[i] = pred
+
         # Stitch predictions
-        logger.info(f"[Step 4/6] Stitching predictions...")
+        logger.info(f"[Step 4/8] Stitching predictions...")
         h, w = image_array.shape[:2]
         mask = stitch_predictions(predictions, rows, cols, h, w)
         logger.info(f"  Created mask of size {mask.shape}")
@@ -410,12 +445,12 @@ async def run_inference_for_project(project_id: str, user_id: str):
         logger.info(f"  DEBUG: Saved mask to {debug_dir}/mask_{project_id}.png")
 
         # Find polygons
-        logger.info(f"[Step 5/6] Extracting polygons from mask...")
+        logger.info(f"[Step 5/8] Extracting polygons from mask...")
         outer_polygons, inner_polygons = find_polygons(mask)
         logger.info(f"  Found {len(outer_polygons)} outer polygons, {len(inner_polygons)} inner polygons")
 
         # Convert to coordinates
-        logger.info(f"[Step 6/6] Converting to geographic coordinates...")
+        logger.info(f"[Step 6/8] Converting to geographic coordinates...")
         coord_polygons = pixels_to_coordinates(outer_polygons, lons, lats_array)
         inner_coord_polygons = pixels_to_coordinates(inner_polygons, lons, lats_array)
 
@@ -428,6 +463,34 @@ async def run_inference_for_project(project_id: str, user_id: str):
             ]
 
         logger.info(f"  Converted {len(coord_polygons)} polygons to coordinates")
+
+        # Step 7/8: Remove roads and buildings (OSM post-processing)
+        logger.info(f"[Step 7/8] Fetching OSM roads and buildings for post-processing...")
+        roads, buildings = await asyncio.gather(
+            fetch_osm_roads(min_lat, min_lng, max_lat, max_lng),
+            fetch_osm_buildings(min_lat, min_lng, max_lat, max_lng),
+        )
+        logger.info(f"  Got {len(roads)} road segments, {len(buildings)} buildings from OSM")
+        coord_polygons = subtract_features(coord_polygons, roads, "roads")
+        coord_polygons = subtract_features(coord_polygons, buildings, "buildings")
+
+        # Step 8/8: Simplify polygon edges (equivalent to mapshaper -simplify 20%)
+        logger.info(f"[Step 8/8] Simplifying polygon edges...")
+        coord_polygons = simplify_polygons(coord_polygons, tolerance_meters=1.5)
+        logger.info(f"  Simplified {len(coord_polygons)} polygons")
+
+        # Clip to project boundary — tiles cover the bounding box, so detected
+        # parking lots outside the actual boundary must be excluded.
+        clipped = []
+        for poly in coord_polygons:
+            try:
+                clipped_poly = poly.intersection(boundary_shape)
+                if not clipped_poly.is_empty:
+                    clipped.append(clipped_poly)
+            except Exception as e:
+                logger.warning(f"  Boundary clip failed for polygon: {e}")
+        logger.info(f"  Clipped to boundary: {len(clipped)}/{len(coord_polygons)} polygons retained")
+        coord_polygons = clipped
 
         # Debug: log first polygon coordinates
         if coord_polygons:
@@ -446,15 +509,20 @@ async def run_inference_for_project(project_id: str, user_id: str):
             if poly.is_empty:
                 continue
 
-            wkt = f"SRID=4326;{poly.wkt}"
-            db_polygon = PolygonModel(
-                project_id=project_id,
-                geometry=wkt,
-                status="detected",
-                properties={},
-            )
-            db.add(db_polygon)
-            saved_count += 1
+            # Flatten any MultiPolygons that slipped through (e.g. from simplification)
+            parts = list(poly.geoms) if isinstance(poly, MultiPolygon) else [poly]
+            for part in parts:
+                if part.is_empty:
+                    continue
+                wkt = f"SRID=4326;{part.wkt}"
+                db_polygon = PolygonModel(
+                    project_id=project_id,
+                    geometry=wkt,
+                    status="detected",
+                    properties={},
+                )
+                db.add(db_polygon)
+                saved_count += 1
 
         # Update project status
         project.status = "review"
