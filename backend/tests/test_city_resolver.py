@@ -7,6 +7,7 @@ a baseline sanity check across a representative set of US cities.
 Run with:
     cd backend && python -m pytest tests/test_city_resolver.py -v -s
 """
+import re
 import pytest
 from app.services.city_resolver import get_candidates
 
@@ -25,7 +26,9 @@ CITIES_WITH_DATA = [
 ]
 
 # Smaller cities with no public neighborhood GIS data — fallback is expected and correct
-CITIES_FALLBACK_OK: list = []
+CITIES_FALLBACK_OK: list = [
+    ("Ketchum", "ID"),
+]
 
 ALL_CITIES = CITIES_WITH_DATA + CITIES_FALLBACK_OK
 
@@ -57,6 +60,17 @@ async def test_city_candidates_have_valid_geometry(city, state):
         )
         geom = shape(geom_dict)
         assert not geom.is_empty, f"{city}, {state}: candidate '{c['name']}' has empty geometry"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("city,state", CITIES_WITH_DATA)
+async def test_no_raw_zone_code_candidate_names(city, state):
+    """Candidate names should not be raw zone codes like MX-1, CBD-2, DT3."""
+    candidates = await get_candidates(city, state)
+    for c in candidates:
+        assert not re.match(r'^(MX|CBD|DT|D\d)-?\d*$', c["name"], re.IGNORECASE), (
+            f"{city}, {state}: candidate name {c['name']!r} looks like a raw zone code"
+        )
 
 
 @pytest.mark.asyncio

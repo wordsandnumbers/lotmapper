@@ -1,11 +1,14 @@
 """Debug script: print what ArcGIS returns for a city at each stage."""
 import asyncio
 import sys
-import httpx
-import re
 
 sys.path.insert(0, "/app")
-from app.services.city_resolver import _arcgis_search, _query_service_for_candidates, _get_city_centroid, _is_near_city
+from app.services.city_resolver import (
+    _arcgis_search,
+    _query_service_for_downtown,
+    _get_city_centroid,
+    _is_near_city,
+)
 
 CITY = sys.argv[1] if len(sys.argv) > 1 else "Denver"
 STATE = sys.argv[2] if len(sys.argv) > 2 else "CO"
@@ -25,39 +28,29 @@ async def main():
     centroid = await _get_city_centroid(CITY, STATE)
     print(f"\nCity centroid: {centroid}")
 
-    print("\n--- Querying each result's layer 0 ---")
+    print("\n--- Querying each result's layer 0 (merged union) ---")
     for i, r in enumerate(results[:3]):
         url = r.get("url", "")
         if not url:
             continue
-        print(f"\n[{i}] {r.get('title')!r} — {url}")
-        batch = await _query_service_for_candidates(url)
-        print(f"  Raw candidates: {len(batch)}")
-        for c in batch[:5]:
-            near = _is_near_city(c["geometry"], centroid) if centroid else "?"
-            print(f"    name={c['name']!r}  score={c['score']}  near={near}")
-        if len(batch) > 5:
-            print(f"    ... and {len(batch)-5} more")
+        title = r.get("title", "")
+        print(f"\n[{i}] {title!r} — {url}")
 
-    # Check what field names the features have (raw fetch for first result)
-    if results:
-        url = results[0].get("url", "").rstrip("/")
-        query_url = (url + "/query") if re.search(r"/\d+$", url) else (url + "/0/query")
-        print(f"\n--- Raw feature properties from {query_url} ---")
-        try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                r = await client.get(
-                    query_url,
-                    params={"where": "1=1", "outFields": "*", "returnGeometry": "false", "f": "geojson", "resultRecordCount": 1},
-                )
-                fc = r.json()
-            features = fc.get("features", [])
-            if features:
-                print(f"  Fields: {list(features[0].get('properties', {}).keys())}")
-            else:
-                print("  No features returned")
-        except Exception as e:
-            print(f"  Error: {e}")
+        # Try as boundary layer (no keyword filter)
+        candidate = await _query_service_for_downtown(url, service_title=title, filter_by_zone_keywords=False)
+        if candidate:
+            near = _is_near_city(candidate["geometry"], centroid) if centroid else "?"
+            print(f"  Boundary candidate: name={candidate['name']!r}  score={candidate['score']}  area={candidate['_area']:.6f}  near={near}")
+        else:
+            print(f"  No boundary candidate (filter_by_zone_keywords=False)")
+
+        # Try as zoning layer (keyword filter)
+        candidate = await _query_service_for_downtown(url, service_title=title, filter_by_zone_keywords=True)
+        if candidate:
+            near = _is_near_city(candidate["geometry"], centroid) if centroid else "?"
+            print(f"  Zoning candidate:   name={candidate['name']!r}  score={candidate['score']}  area={candidate['_area']:.6f}  near={near}")
+        else:
+            print(f"  No zoning candidate (filter_by_zone_keywords=True)")
 
 
 asyncio.run(main())
