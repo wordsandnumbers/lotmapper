@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, GeoJSON, FeatureGroup, useMap } from 'react-leaflet'
 import { EditControl } from 'react-leaflet-draw'
 import L from 'leaflet'
-import { projectsApi, polygonsApi, inferenceApi } from '../services/api'
+import { projectsApi, polygonsApi, inferenceApi, inferenceStreamUrl } from '../services/api'
 import { useAuthStore } from '../store/auth'
 
 interface Project {
@@ -51,6 +51,8 @@ export default function Editor() {
   const [splitStart, setSplitStart] = useState<[number, number] | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [inferenceProgress, setInferenceProgress] = useState(0)
+  const [inferenceMessage, setInferenceMessage] = useState('')
 
   const featureGroupRef = useRef<L.FeatureGroup>(null)
   const geoJsonRef = useRef<L.GeoJSON>(null)
@@ -77,19 +79,31 @@ export default function Editor() {
   }, [loadData])
 
 
-  // Polling for processing status
+  // SSE stream for inference progress
   useEffect(() => {
     if (project?.status !== 'processing') return
+    const token = useAuthStore.getState().token
+    if (!token || !projectId) return
 
-    const interval = setInterval(async () => {
-      if (!projectId) return
-      const status = await inferenceApi.status(projectId)
-      if (status.status !== 'processing') {
-        loadData()
+    setInferenceProgress(0)
+    setInferenceMessage('Queued...')
+
+    const es = new EventSource(inferenceStreamUrl(projectId, token))
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        if (data.progress !== undefined) setInferenceProgress(data.progress)
+        if (data.message) setInferenceMessage(data.message)
+        if (data.status === 'completed' || data.status === 'failed') {
+          es.close()
+          loadData()
+        }
+      } catch {
+        // ignore parse errors
       }
-    }, 3000)
-
-    return () => clearInterval(interval)
+    }
+    es.onerror = () => es.close()
+    return () => es.close()
   }, [project?.status, projectId, loadData])
 
   const handleRunInference = async () => {
@@ -313,9 +327,18 @@ export default function Editor() {
           )}
 
           {project.status === 'processing' && (
-            <div className="text-center py-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-              <p className="text-sm text-gray-500">Processing...</p>
+            <div className="py-4">
+              <div className="flex items-center mb-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2 flex-shrink-0"></div>
+                <p className="text-sm text-gray-700 font-medium">Processing...</p>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${inferenceProgress}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500">{inferenceMessage || 'Queued...'}</p>
             </div>
           )}
 

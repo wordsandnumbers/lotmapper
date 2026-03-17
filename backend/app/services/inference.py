@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import shutil
-from typing import List, Tuple
+from typing import Callable, List, Optional, Tuple
 import numpy as np
 import cv2
 from PIL import Image, ImageFilter
@@ -162,7 +162,10 @@ def split_image(img: np.ndarray, tile_size: int = 512) -> Tuple[List[np.ndarray]
     return tiles, rows, cols, img_h, img_w
 
 
-def run_model_on_tiles(tiles: List[np.ndarray]) -> List[np.ndarray]:
+def run_model_on_tiles(
+    tiles: List[np.ndarray],
+    tile_progress_fn: Optional[Callable] = None,
+) -> List[np.ndarray]:
     """Run inference on a list of image tiles using the parking lot model."""
     print("[INFERENCE] Getting model...", flush=True)
     model, feature_extractor = get_model()
@@ -209,6 +212,8 @@ def run_model_on_tiles(tiles: List[np.ndarray]) -> List[np.ndarray]:
             )
             pred = upsampled.argmax(dim=1).cpu().numpy()[0]
             predictions.append(pred)
+            if tile_progress_fn:
+                tile_progress_fn(idx + 1, total_tiles)
 
     logger.info(f"Completed inference on all {total_tiles} tiles")
     return predictions
@@ -327,11 +332,20 @@ def _convert_single_polygon(
     return None
 
 
-async def run_inference_for_project(project_id: str, user_id: str):
+async def run_inference_for_project(
+    project_id: str,
+    user_id: str,
+    progress_callback: Optional[Callable] = None,
+):
     """
     Run the full inference pipeline for a project.
-    This is called as a background task.
+    Called as a background task or from the worker.
+    progress_callback(step, total, progress_pct, message) is awaited after each step.
     """
+    async def _cb(step: int, total: int, pct: int, msg: str) -> None:
+        if progress_callback:
+            await progress_callback(step, total, pct, msg)
+
     import time
     start_time = time.time()
 
@@ -368,6 +382,7 @@ async def run_inference_for_project(project_id: str, user_id: str):
 
         logger.info(f"[Step 1/8] Fetching satellite tiles...")
         logger.info(f"  Bounds: {min_lat:.4f}, {min_lng:.4f} to {max_lat:.4f}, {max_lng:.4f}")
+        await _cb(1, 8, 5, "Fetching satellite tiles...")
 
         # Calculate optimal zoom
         zoom = calculate_optimal_zoom(min_lat, min_lng, max_lat, max_lng)
@@ -379,6 +394,7 @@ async def run_inference_for_project(project_id: str, user_id: str):
             min_lat, min_lng, max_lat, max_lng, zoom
         )
         logger.info(f"  Fetched image: {image_array.shape[1]}x{image_array.shape[0]} pixels in {time.time() - fetch_start:.1f}s")
+        await _cb(1, 8, 10, "Satellite tiles fetched")
 
         # Debug: save stitched image and log coordinate grid corners
         debug_img = Image.fromarray(image_array)
@@ -394,6 +410,7 @@ async def run_inference_for_project(project_id: str, user_id: str):
         logger.info(f"[Step 2/8] Splitting image into 512x512 tiles...")
         tiles, rows, cols, img_h, img_w = split_image(image_array)
         logger.info(f"  Split into {len(tiles)} tiles ({rows}x{cols} grid)")
+        await _cb(2, 8, 15, f"Split into {len(tiles)} tiles")
 
         # Pre-filter: skip inference on tiles that don't intersect the project boundary.
         boundary_shape = shape(bounds)
@@ -424,8 +441,21 @@ async def run_inference_for_project(project_id: str, user_id: str):
         # Run inference in a thread pool so the event loop stays free for other requests
         logger.info(f"[Step 3/8] Running model inference on {len(active_tiles)} tiles...")
         inference_start = time.time()
-        loop = asyncio.get_event_loop()
-        active_predictions = await loop.run_in_executor(None, run_model_on_tiles, active_tiles)
+        await _cb(3, 8, 15, f"Running model on {len(active_tiles)} tiles...")
+
+        loop = asyncio.get_running_loop()
+        if progress_callback and active_tiles:
+            def tile_progress_sync(tile_idx: int, total_tiles: int) -> None:
+                pct = 15 + int((tile_idx / total_tiles) * 45)
+                asyncio.run_coroutine_threadsafe(
+                    progress_callback(3, 8, pct, f"Running model on tile {tile_idx}/{total_tiles}"),
+                    loop,
+                )
+            active_predictions = await loop.run_in_executor(
+                None, lambda: run_model_on_tiles(active_tiles, tile_progress_fn=tile_progress_sync)
+            )
+        else:
+            active_predictions = await loop.run_in_executor(None, run_model_on_tiles, active_tiles)
         logger.info(f"  Inference completed in {time.time() - inference_start:.1f}s")
 
         # Reconstruct full predictions list (zero mask for skipped tiles)
@@ -438,6 +468,7 @@ async def run_inference_for_project(project_id: str, user_id: str):
         h, w = image_array.shape[:2]
         mask = stitch_predictions(predictions, rows, cols, h, w)
         logger.info(f"  Created mask of size {mask.shape}")
+        await _cb(4, 8, 65, "Stitching predictions...")
 
         # Debug: save mask image
         mask_img = Image.fromarray((mask * 255).astype(np.uint8))
@@ -448,6 +479,7 @@ async def run_inference_for_project(project_id: str, user_id: str):
         logger.info(f"[Step 5/8] Extracting polygons from mask...")
         outer_polygons, inner_polygons = find_polygons(mask)
         logger.info(f"  Found {len(outer_polygons)} outer polygons, {len(inner_polygons)} inner polygons")
+        await _cb(5, 8, 70, f"Extracted {len(outer_polygons)} polygons")
 
         # Convert to coordinates
         logger.info(f"[Step 6/8] Converting to geographic coordinates...")
@@ -463,9 +495,11 @@ async def run_inference_for_project(project_id: str, user_id: str):
             ]
 
         logger.info(f"  Converted {len(coord_polygons)} polygons to coordinates")
+        await _cb(6, 8, 75, "Converting to geographic coordinates...")
 
         # Step 7/8: Remove roads and buildings (OSM post-processing)
         logger.info(f"[Step 7/8] Fetching OSM roads and buildings for post-processing...")
+        await _cb(7, 8, 80, "Fetching OSM data...")
         roads, buildings = await asyncio.gather(
             fetch_osm_roads(min_lat, min_lng, max_lat, max_lng),
             fetch_osm_buildings(min_lat, min_lng, max_lat, max_lng),
@@ -473,9 +507,11 @@ async def run_inference_for_project(project_id: str, user_id: str):
         logger.info(f"  Got {len(roads)} road segments, {len(buildings)} buildings from OSM")
         coord_polygons = subtract_features(coord_polygons, roads, "roads")
         coord_polygons = subtract_features(coord_polygons, buildings, "buildings")
+        await _cb(7, 8, 85, f"Removed roads and buildings ({len(roads)} + {len(buildings)} features)")
 
         # Step 8/8: Simplify polygon edges (equivalent to mapshaper -simplify 20%)
         logger.info(f"[Step 8/8] Simplifying polygon edges...")
+        await _cb(8, 8, 90, "Simplifying polygons...")
         coord_polygons = simplify_polygons(coord_polygons, tolerance_meters=1.5)
         logger.info(f"  Simplified {len(coord_polygons)} polygons")
 
@@ -541,11 +577,15 @@ async def run_inference_for_project(project_id: str, user_id: str):
         import traceback
         traceback.print_exc()
 
-        # Update project status to indicate failure
-        project = db.query(Project).filter(Project.id == project_id).first()
-        if project:
-            project.status = "pending"  # Reset to pending so user can retry
-            db.commit()
+        # Reset project status so user can retry
+        try:
+            project = db.query(Project).filter(Project.id == project_id).first()
+            if project:
+                project.status = "pending"
+                db.commit()
+        except Exception:
+            pass
+        raise
 
     finally:
         db.close()

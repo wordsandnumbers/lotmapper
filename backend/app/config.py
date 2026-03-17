@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Google Maps
     google_maps_api_key: str = ""
 
+    # RabbitMQ
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

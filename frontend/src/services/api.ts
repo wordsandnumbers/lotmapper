@@ -138,4 +138,7 @@ export const inferenceApi = {
   },
 }
 
+export const inferenceStreamUrl = (projectId: string, token: string) =>
+  `/api/v1/inference/stream/${projectId}?token=${encodeURIComponent(token)}`
+
 export default api
