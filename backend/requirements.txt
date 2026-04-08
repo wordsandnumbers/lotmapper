@@ -40,3 +40,6 @@ transformers>=4.36.0
 pytorch-lightning>=2.0.0
 evaluate>=0.4.0
 huggingface-hub>=0.20.0
+
+# Message queue
+aio-pika==9.4.3

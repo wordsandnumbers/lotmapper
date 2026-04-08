@@ -1,11 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
-import { projectsApi, citiesApi } from '../services/api'
+import { projectsApi, citySearchStreamUrl } from '../services/api'
+import { useAuthStore } from '../store/auth'
 
 interface Props {
   onClose: () => void
   onCreated: () => void
+}
+
+function sourceLabel(source: string): string {
+  switch (source) {
+    case 'arcgis_hub': return 'ArcGIS Hub'
+    case 'arcgis_online': return 'ArcGIS Online'
+    case 'fallback': return 'Estimated'
+    default: return source
+  }
 }
 
 // Component to handle rectangle drawing manually (more reliable than EditControl for rectangles)
@@ -184,8 +194,9 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
   const [city, setCity] = useState('')
   const [stateAbbr, setStateAbbr] = useState('')
   const [resolving, setResolving] = useState(false)
+  const [resolveMessage, setResolveMessage] = useState('')
   const [resolveError, setResolveError] = useState('')
-  const [candidates, setCandidates] = useState<Array<{ name: string; geometry: GeoJSON.Geometry; score: number }> | null>(null)
+  const [candidates, setCandidates] = useState<Array<{ name: string; geometry: GeoJSON.Geometry; score: number; source: string }> | null>(null)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [boundsPolygon, setBoundsPolygon] = useState<GeoJSON.Geometry | null>(null)
   const [selectedCandidateName, setSelectedCandidateName] = useState<string | null>(null)
@@ -219,24 +230,42 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
     setBounds(newBounds)
   }
 
-  const handleResolveCity = async () => {
+  const handleResolveCity = () => {
     if (!city.trim() || !stateAbbr.trim()) {
       setResolveError('Please enter both city and state')
       return
     }
     setResolveError('')
     setResolving(true)
+    setResolveMessage('Starting search...')
     setCandidates(null)
     setBoundsPolygon(null)
     setSelectedCandidateName(null)
-    try {
-      const result = await citiesApi.candidates(city.trim(), stateAbbr.trim())
-      setCandidates(result.candidates)
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } }
-      setResolveError(e.response?.data?.detail || 'Failed to find city boundaries')
-    } finally {
+
+    const token = useAuthStore.getState().token
+    const es = new EventSource(citySearchStreamUrl(city.trim(), stateAbbr.trim(), token!))
+
+    es.onmessage = (e) => {
+      const data = JSON.parse(e.data)
+      if (data.message) setResolveMessage(data.message)
+      if (data.status === 'completed') {
+        es.close()
+        setCandidates(data.candidates)
+        setResolving(false)
+        setResolveMessage('')
+      } else if (data.status === 'failed') {
+        es.close()
+        setResolveError(data.error || 'Failed to find city boundaries')
+        setResolving(false)
+        setResolveMessage('')
+      }
+    }
+
+    es.onerror = () => {
+      es.close()
+      setResolveError('Connection error during search')
       setResolving(false)
+      setResolveMessage('')
     }
   }
 
@@ -430,6 +459,10 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                             </div>
                           </div>
 
+                          {resolving && resolveMessage && (
+                            <p className="text-xs text-teal-700 italic">{resolveMessage}</p>
+                          )}
+
                           {resolveError && (
                             <p className="text-sm text-red-600">{resolveError}</p>
                           )}
@@ -473,6 +506,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                                   />
                                   <div className="flex-1 min-w-0">
                                     <p className="text-xs text-gray-800 leading-tight break-words">{c.name}</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">{sourceLabel(c.source)}</p>
                                     <button
                                       type="button"
                                       onClick={() => handleUseCandidate(i)}

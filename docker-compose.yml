@@ -15,6 +15,20 @@ services:
       timeout: 5s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: parking
+      RABBITMQ_DEFAULT_PASS: parking
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend:
     build: ./backend
     ports:
@@ -25,8 +39,11 @@ services:
       - CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
       - HF_HOME=/app/.cache/huggingface
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+      - RABBITMQ_URL=amqp://parking:parking@rabbitmq:5672/
     depends_on:
       db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     volumes:
       - ./model:/app/model:ro  # Mount custom trained model
@@ -35,6 +52,25 @@ services:
       - tile_cache:/app/tile_cache  # Cached map tiles
     command: >
       sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  worker:
+    build: ./backend
+    command: python -m app.worker_main
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/parking_lots
+      - RABBITMQ_URL=amqp://parking:parking@rabbitmq:5672/
+      - HF_HOME=/app/.cache/huggingface
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./model:/app/model:ro
+      - hf_cache:/app/.cache/huggingface
+      - ./debug:/app/debug
+      - tile_cache:/app/tile_cache
 
   frontend:
     build: ./frontend
