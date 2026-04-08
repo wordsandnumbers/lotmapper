@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Any, Callable
 import httpx
 from shapely.geometry import shape, Point, mapping
 from shapely.ops import transform, unary_union
@@ -316,7 +316,23 @@ async def _arcgis_search_and_fetch(query: str, num: int = 5) -> List[dict]:
     return best
 
 
-async def get_candidates(city: str, state: str) -> List[dict]:
+
+def _tag_source(batch: List[dict], source: str) -> List[dict]:
+    for c in batch:
+        c.setdefault("source", source)
+    return batch
+
+
+async def _emit(cb: Optional[Any], message: str) -> None:
+    if cb:
+        await cb({"status": "searching", "message": message})
+
+
+async def get_candidates(
+    city: str,
+    state: str,
+    progress_cb: Optional[Callable] = None,
+) -> List[dict]:
     """
     Return all named polygon features from ArcGIS for the given city/state,
     ranked by relevance (downtown keywords first, then smaller area first).
@@ -327,12 +343,13 @@ async def get_candidates(city: str, state: str) -> List[dict]:
       3. Geographic filter: keep only features within ~0.75° of city centroid.
       4. Fallback: single 800m buffer entry.
 
-    Each entry: {"name": str, "geometry": GeoJSON dict, "score": int}
+    Each entry: {"name": str, "geometry": GeoJSON dict, "score": int, "source": str}
     score=1 → contains downtown keyword, score=0 → other, score=-1 → fallback
     """
     candidates: List[dict] = []
 
-    # --- Stage 1: Hub API — fast, purpose-built for city open data ---
+    # --- Stage 1: Hub API ---
+    await _emit(progress_cb, f"Searching ArcGIS Hub for {city}, {state}...")
     hub_queries = [
         f"downtown {city} district",
         f"downtown {city} boundary",
@@ -342,6 +359,7 @@ async def get_candidates(city: str, state: str) -> List[dict]:
     ]
     hub_batches = await asyncio.gather(*[_hub_search_and_fetch(q) for q in hub_queries])
     for batch in hub_batches:
+        _tag_source(batch, "arcgis_hub")
         candidates.extend(batch)
 
     # --- Geographic filter ---
@@ -349,9 +367,15 @@ async def get_candidates(city: str, state: str) -> List[dict]:
     if candidates and centroid:
         candidates = [c for c in candidates if _is_near_city(c["geometry"], centroid)]
 
-    # --- Stage 2: ArcGIS Online search if no high-confidence Hub results ---
+    high_conf = [c for c in candidates if c["score"] >= 1]
+    if high_conf:
+        await _emit(progress_cb, f"Found {len(high_conf)} downtown boundary match{'es' if len(high_conf) != 1 else ''}")
+    elif candidates:
+        await _emit(progress_cb, f"Found {len(candidates)} nearby area{'s' if len(candidates) != 1 else ''}, no exact downtown match")
+
+    # --- Stage 2: ArcGIS Online search if no high-confidence results ---
     if not any(c["score"] >= 1 for c in candidates):
-        logger.info(f"Hub API found no high-confidence results for {city}, {state}; trying ArcGIS Online")
+        await _emit(progress_cb, "Trying ArcGIS Online search...")
         arcgis_queries = [
             f"downtown {city}",
             f"{city} {state} downtown district",
@@ -359,6 +383,7 @@ async def get_candidates(city: str, state: str) -> List[dict]:
         ]
         arcgis_batches = await asyncio.gather(*[_arcgis_search_and_fetch(q) for q in arcgis_queries])
         for batch in arcgis_batches:
+            _tag_source(batch, "arcgis_online")
             candidates.extend(batch)
 
         if candidates and centroid:
@@ -366,6 +391,7 @@ async def get_candidates(city: str, state: str) -> List[dict]:
 
     # --- Stage 3: org-ID discovery if still no high-confidence results ---
     if not any(c["score"] >= 1 for c in candidates):
+        await _emit(progress_cb, "Discovering city organization datasets...")
         broad_results = await _arcgis_search(f"{city} {state}", num=20)
         # Count all arcgis.com org IDs — the geographic filter handles off-city results.
         # Don't require city name in item title; some city orgs publish with generic titles.
@@ -386,14 +412,16 @@ async def get_candidates(city: str, state: str) -> List[dict]:
         if org_queries:
             org_batches = await asyncio.gather(*[_arcgis_search_and_fetch(q, num=10) for q in org_queries])
             for batch in org_batches:
+                _tag_source(batch, "arcgis_online")
                 candidates.extend(batch)
 
             if candidates and centroid:
                 candidates = [c for c in candidates if _is_near_city(c["geometry"], centroid)]
 
     if not candidates:
+        await _emit(progress_cb, "No boundaries found, using approximate downtown area")
         geom = await _fallback_city_buffer(city, state)
-        return [{"name": "Estimated downtown (800m radius)", "geometry": geom, "score": -1}]
+        return [{"name": "Estimated downtown (800m radius)", "geometry": geom, "score": -1, "source": "fallback"}]
 
     # Deduplicate by name, sort: score desc then area asc, return top 10
     seen: set = set()
@@ -405,7 +433,10 @@ async def get_candidates(city: str, state: str) -> List[dict]:
             deduped.append(c)
 
     deduped.sort(key=lambda c: (-c["score"], c["_area"]))
-    return [{"name": c["name"], "geometry": c["geometry"], "score": c["score"]} for c in deduped[:10]]
+    return [
+        {"name": c["name"], "geometry": c["geometry"], "score": c["score"], "source": c.get("source", "arcgis_hub")}
+        for c in deduped[:10]
+    ]
 
 
 async def resolve_downtown(city: str, state: str) -> dict:
