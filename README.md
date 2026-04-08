@@ -4,18 +4,22 @@ A web application for detecting and editing parking lot polygons from satellite 
 
 ## Features
 
-- **AI-Powered Detection**: Uses a SegFormer model to detect parking lots from satellite imagery
-- **Interactive Map Editor**: Edit, add, delete, and split parking lot polygons
+- **AI-Powered Detection**: Uses a SegFormer model (UTEL-UIUC/SegFormer-large-parking) to detect parking lots from Google Maps satellite imagery
+- **Worker Queue**: Inference jobs run in a dedicated RabbitMQ-backed worker container, keeping the API responsive
+- **Live Progress**: SSE-based progress streaming so the browser shows real-time inference status
+- **Interactive Map Editor**: Edit, add, delete, and split parking lot polygons on a Leaflet map
+- **City Boundary Search**: Look up official downtown/city boundaries by name (via ArcGIS Hub) to use as project bounds
 - **Multi-User Support**: Role-based access control (Admin, Reviewer)
-- **Project Management**: Create projects for different areas, track status through workflow
-- **Satellite Imagery**: Uses ESRI World Imagery tiles
+- **Project Management**: Create projects for different areas, track status through a review workflow
 
 ## Tech Stack
 
-- **Backend**: FastAPI (Python)
-- **Frontend**: React + TypeScript + Vite
-- **Database**: PostgreSQL + PostGIS
-- **Maps**: Leaflet + React-Leaflet
+- **Backend**: FastAPI (Python 3.11+)
+- **Worker**: Same backend image, runs RabbitMQ consumer for inference jobs
+- **Frontend**: React + TypeScript, served via nginx
+- **Database**: PostgreSQL 15 + PostGIS
+- **Message Queue**: RabbitMQ 3.13
+- **Maps**: Google Maps satellite tiles (proxied + cached by backend)
 - **Auth**: JWT-based authentication
 
 ## Getting Started
@@ -23,86 +27,49 @@ A web application for detecting and editing parking lot polygons from satellite 
 ### Prerequisites
 
 - Docker and Docker Compose
-- Node.js 20+ (for local frontend development)
-- Python 3.11+ (for local backend development)
+- A Google Maps API key (set in `.env`)
 
-### Quick Start with Docker
+### Quick Start
 
-1. Clone the repository:
+1. Clone the repository and set up your environment:
    ```bash
-   cd /Users/justin/git/parking-lot-app
+   cp .env.example .env
+   # Edit .env and set GOOGLE_MAPS_API_KEY and SECRET_KEY
    ```
 
-2. Start the services:
+2. Start all services:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 3. Create an admin user:
    ```bash
-   docker-compose exec backend python scripts/create_admin.py admin@example.com yourpassword
+   docker compose exec backend python scripts/create_admin.py admin@example.com yourpassword
    ```
 
 4. Access the application:
    - Frontend: http://localhost:5173
    - Backend API: http://localhost:8000
    - API Docs: http://localhost:8000/docs
+   - RabbitMQ Management: http://localhost:15672 (user: `parking` / `parking`)
 
-### Local Development
+### Environment Variables
 
-#### Backend
-
-1. Create a virtual environment:
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Set up the database (requires PostgreSQL with PostGIS):
-   ```bash
-   # Create database
-   createdb parking_lots
-   psql parking_lots -c "CREATE EXTENSION postgis;"
-
-   # Run migrations
-   alembic upgrade head
-   ```
-
-4. Create an admin user:
-   ```bash
-   python scripts/create_admin.py admin@example.com yourpassword
-   ```
-
-5. Start the server:
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-
-#### Frontend
-
-1. Install dependencies:
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-2. Start the development server:
-   ```bash
-   npm run dev
-   ```
+Backend (`.env`):
+```
+DATABASE_URL=postgresql://postgres:postgres@db:5432/parking_lots
+SECRET_KEY=your-secret-key
+GOOGLE_MAPS_API_KEY=your-google-maps-key
+CORS_ORIGINS=["http://localhost:5173"]
+RABBITMQ_URL=amqp://parking:parking@rabbitmq:5672/
+```
 
 ## Usage
 
 ### Workflow
 
-1. **Create a Project**: Click "New Project" on the dashboard and draw a bounding box on the map
-2. **Run Detection**: Click "Run Detection" to start the AI model
+1. **Create a Project**: Click "New Project" on the dashboard, then either draw a boundary on the map or search for a city/downtown boundary by name
+2. **Run Detection**: Click "Run Detection" — the job is queued and progress streams to the UI in real time
 3. **Edit Results**: Use the map tools to edit, add, delete, or split polygons
 4. **Submit for Review**: When editing is complete, submit for admin review
 5. **Approve**: Admins can approve the final results
@@ -116,7 +83,7 @@ A web application for detecting and editing parking lot polygons from satellite 
 
 ### User Roles
 
-- **Admin**: Full access, can approve projects and manage users
+- **Admin**: Full access — can approve projects and manage users
 - **Reviewer**: Can create projects, run detection, and edit polygons
 
 ## Project Structure
@@ -125,41 +92,39 @@ A web application for detecting and editing parking lot polygons from satellite 
 parking-lot-app/
 ├── backend/
 │   ├── app/
-│   │   ├── api/           # FastAPI routes
+│   │   ├── api/           # FastAPI routes (auth, projects, polygons, inference, cities, maps)
 │   │   ├── core/          # Security & permissions
 │   │   ├── models/        # SQLAlchemy models
 │   │   ├── schemas/       # Pydantic schemas
-│   │   └── services/      # Business logic
-│   ├── alembic/           # Database migrations
+│   │   ├── services/      # Business logic (inference, city_resolver, queue, sse, tiles, osm)
+│   │   └── worker_main.py # RabbitMQ inference worker entry point
+│   ├── alembic/           # Database migrations (001–004)
 │   └── scripts/           # Utility scripts
 ├── frontend/
 │   └── src/
 │       ├── components/    # React components
 │       ├── pages/         # Page components
 │       ├── services/      # API client
-│       └── store/         # State management
+│       └── store/         # State management (zustand)
+├── model/                 # Custom model checkpoint (volume-mounted, not committed)
 └── docker-compose.yml
-```
-
-## Configuration
-
-### Environment Variables
-
-Backend (`.env`):
-```
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/parking_lots
-SECRET_KEY=your-secret-key
-CORS_ORIGINS=["http://localhost:5173"]
-MODEL_PATH=../model/parking_lot_model.pt
 ```
 
 ## Model Integration
 
-To use your own trained model:
+The app uses [UTEL-UIUC/SegFormer-large-parking](https://huggingface.co/UTEL-UIUC/SegFormer-large-parking) from HuggingFace, downloaded automatically on first run and cached in a Docker volume.
 
-1. Place your model checkpoint in the `model/` directory
-2. Update `MODEL_PATH` in the backend configuration
-3. The model should be compatible with the SegformerFinetuner class from the original parking-lot-mapping-tool
+To use a custom-trained checkpoint:
+
+1. Place your model file in the `model/` directory
+2. Set `MODEL_PATH` in your environment configuration
+
+## Development Notes
+
+- **Frontend changes** require a rebuild: `docker compose build frontend && docker compose up -d frontend`
+- **Backend changes** must be copied in (source is not volume-mounted): `docker compose cp <file> backend:/app/<path>`
+- **Migrations** must also be copied before running: `docker compose cp backend/alembic/versions/XXX.py backend:/app/alembic/versions/`
+- The worker container shares the backend image — restart it after backend changes: `docker compose restart worker`
 
 ## API Documentation
 

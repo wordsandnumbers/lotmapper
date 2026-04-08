@@ -5,10 +5,11 @@ A multi-user web application for generating and editing parking lot GeoJSON from
 
 ## Tech Stack
 - **Backend**: FastAPI (Python 3.11+)
-- **Frontend**: React 18 + TypeScript + Vite
+- **Frontend**: React 18 + TypeScript + Vite (served via nginx in production)
 - **Database**: PostgreSQL 15 + PostGIS
-- **Maps**: Google Maps satellite tiles (proxied via backend)
+- **Maps**: Google Maps satellite tiles (proxied via backend, with local file cache)
 - **Auth**: JWT tokens + RBAC
+- **Message Queue**: RabbitMQ (inference job queue)
 - **Containerization**: Docker Compose
 
 ---
@@ -24,12 +25,17 @@ parking-lot-app/
 │   │   ├── main.py              # FastAPI app entry
 │   │   ├── config.py            # Settings/env vars
 │   │   ├── database.py          # DB connection
+│   │   ├── worker_main.py       # RabbitMQ inference worker entry
 │   │   ├── api/
 │   │   │   ├── __init__.py
 │   │   │   ├── auth.py          # Login, register, user mgmt
+│   │   │   ├── cities.py        # City boundary search
+│   │   │   ├── deps.py          # Shared dependencies
+│   │   │   ├── inference.py     # Trigger inference endpoint
+│   │   │   ├── maps.py          # Google Maps tile proxy
+│   │   │   ├── polygons.py      # CRUD for GeoJSON polygons
 │   │   │   ├── projects.py      # Area/project management
-│   │   │   ├── inference.py     # Run model endpoint
-│   │   │   └── polygons.py      # CRUD for GeoJSON polygons
+│   │   │   └── tiles.py         # Tile serving
 │   │   ├── models/
 │   │   │   ├── __init__.py
 │   │   │   ├── user.py          # User + roles
@@ -38,16 +44,17 @@ parking-lot-app/
 │   │   ├── schemas/
 │   │   │   ├── __init__.py
 │   │   │   └── *.py             # Pydantic schemas
-│   │   ├── services/
-│   │   │   ├── __init__.py
-│   │   │   ├── inference.py     # Model inference logic
-│   │   │   ├── tiles.py         # Satellite tile fetching
-│   │   │   └── auth.py          # Password hashing, JWT
-│   │   └── core/
+│   │   └── services/
 │   │       ├── __init__.py
-│   │       ├── security.py      # JWT utilities
-│   │       └── permissions.py   # RBAC decorators
-│   ├── alembic/                 # DB migrations
+│   │       ├── city_resolver.py # City boundary lookup (ArcGIS Hub + AGOL)
+│   │       ├── inference.py     # Model inference logic
+│   │       ├── osm.py           # OSM road/building subtraction
+│   │       ├── queue.py         # RabbitMQ publish/consume helpers
+│   │       ├── sse.py           # SSE event streaming
+│   │       ├── stream.py        # Progress streaming helpers
+│   │       ├── tile_cache.py    # Tile caching service
+│   │       └── tiles.py         # Satellite tile fetching
+│   ├── alembic/                 # DB migrations (001–004)
 │   ├── tests/
 │   ├── requirements.txt
 │   └── Dockerfile
@@ -69,7 +76,7 @@ parking-lot-app/
 │   │   └── main.tsx
 │   ├── package.json
 │   ├── vite.config.ts
-│   └── Dockerfile
+│   └── Dockerfile               # nginx production build
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -153,7 +160,8 @@ CREATE TABLE polygon_history (
 - [x] Endpoint to trigger inference for a project
 - [x] Fetch Google Maps satellite tiles for bounding box (with local file cache)
 - [x] Run model and save results to DB
-- [x] Background job support (runs in thread pool executor)
+- [x] RabbitMQ worker queue — inference jobs published by API, consumed by dedicated worker container
+- [x] SSE progress streaming — client subscribes to `/inference/{project_id}/progress` for live updates
 - [x] Pre-filter tiles to skip those outside project boundary (efficiency)
 - [x] Post-clip detected polygons to project boundary (correctness)
 - [x] OSM road/building subtraction post-processing
@@ -166,6 +174,15 @@ CREATE TABLE polygon_history (
 - [x] Create new polygon (manual add)
 - [x] Split polygon into two
 - [ ] Polygon history/audit trail
+
+### 2.6 City Boundary Search
+- [x] `/cities/search` endpoint — look up official city/downtown boundaries by name
+- [x] Primary source: ArcGIS Hub API (hub.arcgis.com) — fast city open data queries
+- [x] Fallback: ArcGIS Online search + org-ID discovery
+- [x] Geographic filter: results must be within 0.3° of city centroid
+- [x] Scoring: prefer layers whose titles contain downtown + boundary keywords
+- [x] Minimum area filter (1e-5 deg²) to exclude parcel-level noise
+- [x] Returns GeoJSON boundary ready to use as project bounds
 
 ---
 
@@ -185,7 +202,7 @@ CREATE TABLE polygon_history (
 
 ### 3.3 Dashboard
 - [x] Project list view
-- [x] Create new project (draw polygon/multipolygon boundary on Google Maps)
+- [x] Create new project (draw polygon/multipolygon on Google Maps, or search for a city boundary)
 - [x] Project status indicators
 - [ ] Filter/search projects
 
@@ -201,6 +218,7 @@ CREATE TABLE polygon_history (
 - [x] Save changes to backend
 - [ ] Undo/redo support
 - [x] Submit for approval button
+- [x] SSE-based progress indicator during inference
 
 ### 3.5 Admin Panel
 - [x] User list
@@ -220,8 +238,10 @@ CREATE TABLE polygon_history (
 ### 4.2 Docker Setup
 - [x] Backend Dockerfile
 - [x] Frontend Dockerfile (nginx for production)
-- [x] docker-compose.yml with all services
-- [x] Volume mounts for model files
+- [x] Worker Dockerfile (shares backend image, runs worker_main.py)
+- [x] RabbitMQ service (rabbitmq:3.13-management)
+- [x] docker-compose.yml with all services (db, rabbitmq, backend, worker, frontend)
+- [x] Volume mounts for model files, HuggingFace cache, tile cache, debug output
 
 ### 4.3 Production Readiness
 - [x] Environment variable configuration
@@ -243,7 +263,8 @@ CREATE TABLE polygon_history (
 7. **Inference integration** - Adapt existing model code
 8. **Admin panel** - User management
 9. **Docker setup** - Containerization
-10. **Testing & polish**
+10. **Worker queue** - RabbitMQ + SSE progress streaming
+11. **City boundary search** - ArcGIS Hub integration
 
 ---
 
@@ -254,6 +275,8 @@ CREATE TABLE polygon_history (
 - Soft deletes for polygons (audit trail)
 - Admin approval required for new user accounts
 - Project bounds stored as `GEOMETRY` to support both Polygon and MultiPolygon
-- Inference runs in thread pool executor to keep event loop free
+- Inference moved from thread pool executor to RabbitMQ worker queue (dedicated worker container)
+- SSE used for real-time progress updates from worker back to browser
 - Tile pre-filter skips model inference on tiles outside project boundary
 - Detected polygons post-clipped to project boundary for correctness
+- City boundary search uses ArcGIS Hub as primary source (fast, city-focused), AGOL as fallback

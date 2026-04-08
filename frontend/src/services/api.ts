@@ -141,4 +141,7 @@ export const inferenceApi = {
 export const inferenceStreamUrl = (projectId: string, token: string) =>
   `/api/v1/inference/stream/${projectId}?token=${encodeURIComponent(token)}`
 
+export const citySearchStreamUrl = (city: string, state: string, token: string) =>
+  `/api/v1/cities/search/stream?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&token=${encodeURIComponent(token)}`
+
 export default api
