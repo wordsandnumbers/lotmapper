@@ -43,3 +43,4 @@ huggingface-hub>=0.20.0
 
 # Message queue
 aio-pika==9.4.3
+rstream==1.0.0
