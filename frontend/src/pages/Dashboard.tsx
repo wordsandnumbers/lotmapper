@@ -14,7 +14,11 @@ interface Project {
 }
 
 export default function Dashboard() {
+  const PAGE_SIZE = 10
+
   const [projects, setProjects] = useState<Project[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>('')
@@ -23,10 +27,13 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
 
-  const loadProjects = async () => {
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  const loadProjects = async (currentPage = page) => {
     try {
-      const data = await projectsApi.list(statusFilter || undefined)
+      const data = await projectsApi.list(statusFilter || undefined, currentPage, PAGE_SIZE)
       setProjects(data.projects)
+      setTotal(data.total)
     } catch (error) {
       console.error('Failed to load projects:', error)
     } finally {
@@ -35,8 +42,14 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    loadProjects()
+    setPage(1)
+    loadProjects(1)
   }, [statusFilter])
+
+  useEffect(() => {
+    loadProjects(page)
+    window.scrollTo(0, 0)
+  }, [page])
 
   const handleProjectCreated = () => {
     setShowCreateModal(false)
@@ -106,80 +119,107 @@ export default function Dashboard() {
             <p className="text-gray-500">No projects yet. Create one to get started!</p>
           </div>
         ) : (
-          <div className="bg-white shadow overflow-hidden sm:rounded-md">
-            <ul className="divide-y divide-gray-200">
-              {projects.map((project) => (
-                <li key={project.id}>
-                  <div className="flex items-center hover:bg-gray-50">
-                    <button
-                      onClick={() => navigate(`/project/${project.id}`)}
-                      className="flex-1 text-left"
-                    >
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-blue-600 truncate">
-                            {project.name}
-                          </p>
-                          <div className="ml-2 flex-shrink-0 flex">
-                            <span
-                              className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(
-                                project.status
-                              )}`}
-                            >
-                              {project.status}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="mt-2 sm:flex sm:justify-between">
-                          <div className="sm:flex">
-                            <p className="flex items-center text-sm text-gray-500">
-                              {project.description || 'No description'}
+          <>
+            <div className="bg-white shadow overflow-hidden sm:rounded-md">
+              <ul className="divide-y divide-gray-200">
+                {projects.map((project) => (
+                  <li key={project.id}>
+                    <div className="flex items-center hover:bg-gray-50">
+                      <button
+                        onClick={() => navigate(`/project/${project.id}`)}
+                        className="flex-1 text-left"
+                      >
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-blue-600 truncate">
+                              {project.name}
                             </p>
+                            <div className="ml-2 flex-shrink-0 flex">
+                              <span
+                                className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(
+                                  project.status
+                                )}`}
+                              >
+                                {project.status}
+                              </span>
+                            </div>
                           </div>
-                          <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
-                            <span>{project.polygon_count} polygons</span>
-                            <span className="mx-2">|</span>
-                            <span>
-                              {new Date(project.created_at).toLocaleDateString()}
-                            </span>
+                          <div className="mt-2 sm:flex sm:justify-between">
+                            <div className="sm:flex">
+                              <p className="flex items-center text-sm text-gray-500">
+                                {project.description || 'No description'}
+                              </p>
+                            </div>
+                            <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
+                              <span>{project.polygon_count} polygons</span>
+                              <span className="mx-2">|</span>
+                              <span>
+                                {new Date(project.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </button>
-                    {user?.role === 'admin' && (
-                      <div className="px-4">
-                        {deleteProjectId === project.id ? (
-                          <div className="flex items-center gap-2">
+                      </button>
+                      {user?.role === 'admin' && (
+                        <div className="px-4">
+                          {deleteProjectId === project.id ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleDelete(project.id)}
+                                disabled={deleting}
+                                className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
+                              >
+                                {deleting ? 'Deleting...' : 'Confirm'}
+                              </button>
+                              <button
+                                onClick={() => setDeleteProjectId(null)}
+                                disabled={deleting}
+                                className="text-gray-500 hover:text-gray-700 text-sm"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
                             <button
-                              onClick={() => handleDelete(project.id)}
-                              disabled={deleting}
-                              className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
+                              onClick={() => setDeleteProjectId(project.id)}
+                              className="text-red-600 hover:text-red-800 text-sm font-medium"
                             >
-                              {deleting ? 'Deleting...' : 'Confirm'}
+                              Delete
                             </button>
-                            <button
-                              onClick={() => setDeleteProjectId(null)}
-                              disabled={deleting}
-                              className="text-gray-500 hover:text-gray-700 text-sm"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setDeleteProjectId(project.id)}
-                            className="text-red-600 hover:text-red-800 text-sm font-medium"
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-gray-500">
+                Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => p - 1)}
+                  disabled={page === 1}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-md disabled:opacity-40 hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                <span className="px-3 py-1 text-sm text-gray-700">
+                  {page} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page === totalPages}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-md disabled:opacity-40 hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
