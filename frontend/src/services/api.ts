@@ -60,8 +60,9 @@ export const citiesApi = {
 
 // Projects API
 export const projectsApi = {
-  list: async (status?: string) => {
-    const params = status ? { status } : {}
+  list: async (status?: string, page = 1, pageSize = 10) => {
+    const params: Record<string, unknown> = { limit: pageSize, offset: (page - 1) * pageSize }
+    if (status) params.status = status
     const response = await api.get('/projects', { params })
     return response.data
   },
