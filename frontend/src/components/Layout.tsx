@@ -1,15 +1,14 @@
-import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
+import { Outlet, Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
+
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  isActive
+    ? 'border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
+    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
 
 export default function Layout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
-  const { pathname } = useLocation()
-
-  const navClass = (path: string) =>
-    pathname === path || pathname.startsWith(path + '/')
-      ? 'border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
-      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
 
   const handleLogout = () => {
     logout()
@@ -28,13 +27,13 @@ export default function Layout() {
                 </Link>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link to="/dashboard" className={navClass('/dashboard')}>
+                <NavLink to="/dashboard" className={navLinkClass}>
                   Dashboard
-                </Link>
+                </NavLink>
                 {user?.role === 'admin' && (
-                  <Link to="/admin" className={navClass('/admin')}>
+                  <NavLink to="/admin" className={navLinkClass}>
                     Admin
-                  </Link>
+                  </NavLink>
                 )}
               </div>
             </div>
