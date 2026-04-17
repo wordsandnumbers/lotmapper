@@ -119,6 +119,21 @@ To use a custom-trained checkpoint:
 1. Place your model file in the `model/` directory
 2. Set `MODEL_PATH` in your environment configuration
 
+## Citation
+
+If you use this tool or its outputs in research, please cite the model it is built on:
+
+```bibtex
+@inproceedings{qiam2025pipeline,
+  title={A Pipeline and NIR-Enhanced Dataset for Parking Lot Segmentation},
+  author={Qiam, Shirin and Devunuri, Saipraneeth and Lehe, Lewis J},
+  booktitle={2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+  pages={1227--1236},
+  year={2025},
+  organization={IEEE}
+}
+```
+
 ## Development Notes
 
 - **Frontend changes** require a rebuild: `docker compose build frontend && docker compose up -d frontend`
