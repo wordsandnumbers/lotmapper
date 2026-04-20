@@ -14,10 +14,25 @@ from app.models.city_boundary import CityBoundary
 from app.api.deps import get_current_active_user
 from app.core.security import decode_token
 from app.services import sse
-from app.services.city_resolver import resolve_downtown, get_candidates
+from app.services.city_resolver import resolve_downtown, get_candidates, geocode_city
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+@router.get("/geocode")
+async def geocode_city_endpoint(
+    city: str = Query(..., min_length=1),
+    state: str = Query(..., min_length=2, max_length=2),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Return geocoded center and administrative polygon for a US city."""
+    city_norm = city.strip().title()
+    state_norm = state.strip().upper()
+    result = await geocode_city(city_norm, state_norm)
+    if result is None:
+        raise HTTPException(status_code=404, detail="City not found")
+    return result
 
 
 @router.get("/candidates")

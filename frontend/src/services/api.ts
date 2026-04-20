@@ -56,6 +56,8 @@ export const citiesApi = {
     api.get('/cities/resolve', { params: { city, state } }).then(r => r.data),
   candidates: async (city: string, state: string) =>
     api.get('/cities/candidates', { params: { city, state } }).then(r => r.data),
+  geocode: async (city: string, state: string) =>
+    api.get('/cities/geocode', { params: { city, state } }).then(r => r.data),
 }
 
 // Projects API

@@ -18,82 +18,103 @@ function sourceLabel(source: string): string {
   }
 }
 
-// Component to handle rectangle drawing manually (more reliable than EditControl for rectangles)
-function RectangleDrawer({
-  onBoundsSelected
+// Freehand polygon drawing tool
+// Click to add vertices, double-click to finish (3+ points required)
+function PolygonDrawer({
+  onPolygonSelected
 }: {
-  onBoundsSelected: (bounds: { min_lat: number; min_lng: number; max_lat: number; max_lng: number }) => void
+  onPolygonSelected: (polygon: GeoJSON.Geometry | null) => void
 }) {
   const map = useMap()
+  const isDrawingRef = useRef(false)
   const [isDrawing, setIsDrawing] = useState(false)
-  const [startPoint, setStartPoint] = useState<L.LatLng | null>(null)
-  const rectangleRef = useRef<L.Rectangle | null>(null)
-  const previewRef = useRef<L.Rectangle | null>(null)
+  const pointsRef = useRef<L.LatLng[]>([])
+  const previewLayerRef = useRef<L.Polyline | null>(null)
+  const finishedLayerRef = useRef<L.Polygon | null>(null)
 
-  useMapEvents({
-    mousedown(e) {
-      if (!isDrawing) return
-      setStartPoint(e.latlng)
-      // Create preview rectangle
-      const startLatLng: L.LatLngTuple = [e.latlng.lat, e.latlng.lng]
-      previewRef.current = L.rectangle([startLatLng, startLatLng], {
+  const updatePreview = useCallback(() => {
+    if (previewLayerRef.current) {
+      map.removeLayer(previewLayerRef.current)
+      previewLayerRef.current = null
+    }
+    const pts = pointsRef.current
+    if (pts.length >= 2) {
+      previewLayerRef.current = L.polyline(pts, {
         color: '#3388ff',
         weight: 2,
-        fillOpacity: 0.2,
         dashArray: '5, 5',
       }).addTo(map)
-    },
-    mousemove(e) {
-      if (!isDrawing || !startPoint || !previewRef.current) return
-      previewRef.current.setBounds(L.latLngBounds(startPoint, e.latlng))
-    },
-    mouseup(e) {
-      if (!isDrawing || !startPoint) return
+    }
+  }, [map])
 
-      // Remove preview
-      if (previewRef.current) {
-        map.removeLayer(previewRef.current)
-        previewRef.current = null
+  useMapEvents({
+    click(e) {
+      if (!isDrawingRef.current) return
+      pointsRef.current = [...pointsRef.current, e.latlng]
+      updatePreview()
+    },
+    dblclick() {
+      if (!isDrawingRef.current) return
+      // Leaflet fires click before dblclick — remove the last point (added by that click)
+      const pts = pointsRef.current.slice(0, -1)
+      if (pts.length < 3) return
+
+      if (previewLayerRef.current) {
+        map.removeLayer(previewLayerRef.current)
+        previewLayerRef.current = null
+      }
+      if (finishedLayerRef.current) {
+        map.removeLayer(finishedLayerRef.current)
       }
 
-      // Remove old rectangle
-      if (rectangleRef.current) {
-        map.removeLayer(rectangleRef.current)
-      }
-
-      // Create final rectangle
-      const bounds = L.latLngBounds(startPoint, e.latlng)
-      rectangleRef.current = L.rectangle(bounds, {
+      finishedLayerRef.current = L.polygon(pts, {
         color: '#3388ff',
         weight: 2,
         fillOpacity: 0.3,
       }).addTo(map)
 
-      onBoundsSelected({
-        min_lat: bounds.getSouth(),
-        min_lng: bounds.getWest(),
-        max_lat: bounds.getNorth(),
-        max_lng: bounds.getEast(),
-      })
+      const coords = pts.map(p => [p.lng, p.lat])
+      coords.push(coords[0]) // close the ring
+      onPolygonSelected({ type: 'Polygon', coordinates: [coords] })
 
+      pointsRef.current = []
+      isDrawingRef.current = false
       setIsDrawing(false)
-      setStartPoint(null)
       map.dragging.enable()
     },
   })
 
   const startDrawing = useCallback(() => {
+    if (finishedLayerRef.current) {
+      map.removeLayer(finishedLayerRef.current)
+      finishedLayerRef.current = null
+    }
+    if (previewLayerRef.current) {
+      map.removeLayer(previewLayerRef.current)
+      previewLayerRef.current = null
+    }
+    pointsRef.current = []
+    onPolygonSelected(null)
+    isDrawingRef.current = true
     setIsDrawing(true)
     map.dragging.disable()
-  }, [map])
+  }, [map, onPolygonSelected])
 
-  const clearRectangle = useCallback(() => {
-    if (rectangleRef.current) {
-      map.removeLayer(rectangleRef.current)
-      rectangleRef.current = null
+  const clearPolygon = useCallback(() => {
+    if (finishedLayerRef.current) {
+      map.removeLayer(finishedLayerRef.current)
+      finishedLayerRef.current = null
     }
-    onBoundsSelected(null as unknown as { min_lat: number; min_lng: number; max_lat: number; max_lng: number })
-  }, [map, onBoundsSelected])
+    if (previewLayerRef.current) {
+      map.removeLayer(previewLayerRef.current)
+      previewLayerRef.current = null
+    }
+    pointsRef.current = []
+    isDrawingRef.current = false
+    setIsDrawing(false)
+    onPolygonSelected(null)
+    map.dragging.enable()
+  }, [map, onPolygonSelected])
 
   // Add custom control
   useEffect(() => {
@@ -102,10 +123,10 @@ function RectangleDrawer({
         const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control')
 
         const drawBtn = L.DomUtil.create('a', '', container)
-        drawBtn.innerHTML = '▢'
+        drawBtn.innerHTML = '⬠'
         drawBtn.href = '#'
-        drawBtn.title = 'Draw rectangle'
-        drawBtn.style.cssText = 'font-size: 18px; font-weight: bold; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;'
+        drawBtn.title = 'Draw polygon — click to add points, double-click to finish'
+        drawBtn.style.cssText = 'font-size: 16px; font-weight: bold; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;'
         L.DomEvent.on(drawBtn, 'click', (e) => {
           L.DomEvent.preventDefault(e)
           startDrawing()
@@ -114,11 +135,11 @@ function RectangleDrawer({
         const clearBtn = L.DomUtil.create('a', '', container)
         clearBtn.innerHTML = '✕'
         clearBtn.href = '#'
-        clearBtn.title = 'Clear rectangle'
+        clearBtn.title = 'Clear polygon'
         clearBtn.style.cssText = 'font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;'
         L.DomEvent.on(clearBtn, 'click', (e) => {
           L.DomEvent.preventDefault(e)
-          clearRectangle()
+          clearPolygon()
         })
 
         return container
@@ -131,16 +152,12 @@ function RectangleDrawer({
     return () => {
       map.removeControl(control)
     }
-  }, [map, startDrawing, clearRectangle])
+  }, [map, startDrawing, clearPolygon])
 
-  // Show cursor change when drawing
+  // Cursor change when drawing
   useEffect(() => {
     const container = map.getContainer()
-    if (isDrawing) {
-      container.style.cursor = 'crosshair'
-    } else {
-      container.style.cursor = ''
-    }
+    container.style.cursor = isDrawing ? 'crosshair' : ''
   }, [isDrawing, map])
 
   return null
@@ -182,13 +199,8 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
   const [description, setDescription] = useState('')
   const [activeTab, setActiveTab] = useState<Tab>('city')
 
-  // Draw tab state
-  const [bounds, setBounds] = useState<{
-    min_lat: number
-    min_lng: number
-    max_lat: number
-    max_lng: number
-  } | null>(null)
+  // Draw tab state — uses GeoJSON polygon (same as city tab's bounds_polygon)
+  const [drawnPolygon, setDrawnPolygon] = useState<GeoJSON.Geometry | null>(null)
 
   // City search tab state
   const [city, setCity] = useState('')
@@ -215,19 +227,14 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab)
-    // Clear other tab's selection when switching
     if (tab === 'city') {
-      setBounds(null)
+      setDrawnPolygon(null)
     } else {
       setBoundsPolygon(null)
       setCandidates(null)
       setSelectedCandidateName(null)
     }
     setError('')
-  }
-
-  const handleBoundsSelected = (newBounds: { min_lat: number; min_lng: number; max_lat: number; max_lng: number } | null) => {
-    setBounds(newBounds)
   }
 
   const handleResolveCity = () => {
@@ -294,8 +301,8 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
       return
     }
 
-    if (activeTab === 'draw' && !bounds) {
-      setError('Please draw a bounding box on the map')
+    if (activeTab === 'draw' && !drawnPolygon) {
+      setError('Please draw a polygon on the map')
       return
     }
 
@@ -307,19 +314,12 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
     setLoading(true)
 
     try {
-      if (activeTab === 'city' && boundsPolygon) {
-        await projectsApi.create({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          bounds_polygon: boundsPolygon,
-        })
-      } else {
-        await projectsApi.create({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          bounds: bounds!,
-        })
-      }
+      const polygon = activeTab === 'city' ? boundsPolygon : drawnPolygon
+      await projectsApi.create({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        bounds_polygon: polygon!,
+      })
       onCreated()
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } } }
@@ -335,7 +335,9 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
     }
   }
 
-  const submitDisabled = loading || (activeTab === 'draw' ? !bounds : !boundsPolygon)
+  const submitDisabled = loading || (activeTab === 'draw' ? !drawnPolygon : !boundsPolygon)
+
+  const isFallbackOnly = candidates?.length === 1 && candidates[0].score === -1
 
   return (
     <div
@@ -468,7 +470,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                           )}
 
                           <p className="text-sm text-gray-500">
-                            Enter a US city and state abbreviation to find boundary candidates.
+                            Enter a US city and state abbreviation to find downtown zoning boundaries.
                           </p>
                         </>
                       )}
@@ -478,7 +480,10 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-sm text-gray-600 font-medium">
-                              {candidates.length} boundary {candidates.length === 1 ? 'option' : 'options'} found — hover to preview, click "Use this" to select
+                              {isFallbackOnly
+                                ? 'No zoning data found — showing city boundary'
+                                : `${candidates.length} downtown zone ${candidates.length === 1 ? 'district' : 'districts'} found — hover to preview, click "Use this" to select`
+                              }
                             </span>
                             <button
                               type="button"
@@ -488,6 +493,14 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                               Search again
                             </button>
                           </div>
+
+                          {isFallbackOnly && (
+                            <p className="text-sm text-amber-600">
+                              No public zoning data found for this city. The boundary shown is the full city administrative area.
+                              Use the <strong>Draw Area</strong> tab to trace a specific downtown boundary.
+                            </p>
+                          )}
+
                           <div className="flex gap-3 h-[28rem]">
                             {/* Left: candidate list */}
                             <div className="w-48 flex-shrink-0 overflow-y-auto border border-gray-200 rounded-md">
@@ -591,7 +604,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
               {activeTab === 'draw' && (
                 <div>
                   <p className="text-sm text-gray-500 mb-2">
-                    Click the rectangle button, then click and drag on the map to select an area.
+                    Click the polygon button (⬠), then click on the map to add vertices. Double-click to finish.
                   </p>
                   <div className="h-[32rem] border border-gray-300 rounded-md overflow-hidden">
                     <MapContainer
@@ -606,13 +619,12 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                       {statesGeoJson && (
                         <GeoJSON data={statesGeoJson} style={statesStyle} />
                       )}
-                      <RectangleDrawer onBoundsSelected={handleBoundsSelected} />
+                      <PolygonDrawer onPolygonSelected={setDrawnPolygon} />
                     </MapContainer>
                   </div>
-                  {bounds && (
+                  {drawnPolygon && (
                     <p className="text-sm text-green-600 mt-2">
-                      Bounding box selected: {bounds.min_lat.toFixed(4)}, {bounds.min_lng.toFixed(4)} to{' '}
-                      {bounds.max_lat.toFixed(4)}, {bounds.max_lng.toFixed(4)}
+                      Polygon drawn — ready to create project.
                     </p>
                   )}
                 </div>
