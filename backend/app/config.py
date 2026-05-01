@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # Google Maps
     google_maps_api_key: str = ""
+    google_maps_monthly_tile_limit: int = 100000
 
     # RabbitMQ
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
