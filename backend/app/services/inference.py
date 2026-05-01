@@ -26,7 +26,8 @@ from huggingface_hub import hf_hub_download
 from app.database import SessionLocal
 from app.models.project import Project
 from app.models.polygon import Polygon as PolygonModel
-from app.services.tiles import fetch_tiles_for_bounds, calculate_optimal_zoom
+from app.services.tiles import fetch_tiles_for_bounds, calculate_optimal_zoom, estimate_tile_count
+from app.services.tile_usage import get_current_monthly_count, increment_monthly_count
 from app.services.osm import fetch_osm_roads, fetch_osm_buildings, subtract_features, simplify_polygons
 from app.config import get_settings
 
@@ -388,12 +389,26 @@ async def run_inference_for_project(
         zoom = calculate_optimal_zoom(min_lat, min_lng, max_lat, max_lng)
         logger.info(f"  Using zoom level {zoom}")
 
+        # Pre-flight tile quota check
+        if settings.google_maps_monthly_tile_limit > 0:
+            estimated = estimate_tile_count(min_lat, min_lng, max_lat, max_lng, zoom)
+            current_usage = get_current_monthly_count(db)
+            remaining = settings.google_maps_monthly_tile_limit - current_usage
+            logger.info(f"  Tile quota: {current_usage} used, ~{estimated} needed, {remaining} remaining this month")
+            if estimated > remaining:
+                raise RuntimeError(
+                    f"Monthly Google Maps tile quota would be exceeded: "
+                    f"{current_usage} used + ~{estimated} needed > {settings.google_maps_monthly_tile_limit} limit"
+                )
+
         # Fetch tiles
         fetch_start = time.time()
-        image_array, lons, lats_array = await fetch_tiles_for_bounds(
+        image_array, lons, lats_array, api_tile_count = await fetch_tiles_for_bounds(
             min_lat, min_lng, max_lat, max_lng, zoom
         )
-        logger.info(f"  Fetched image: {image_array.shape[1]}x{image_array.shape[0]} pixels in {time.time() - fetch_start:.1f}s")
+        if api_tile_count > 0:
+            increment_monthly_count(db, api_tile_count)
+        logger.info(f"  Fetched image: {image_array.shape[1]}x{image_array.shape[0]} pixels in {time.time() - fetch_start:.1f}s ({api_tile_count} new tiles from API)")
         await _cb(1, 8, 10, "Satellite tiles fetched")
 
         # Debug: save stitched image and log coordinate grid corners

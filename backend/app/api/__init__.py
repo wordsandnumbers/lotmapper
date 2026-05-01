@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api import auth, projects, polygons, inference, maps, tiles, cities
+from app.api import auth, projects, polygons, inference, maps, tiles, cities, usage
 
 api_router = APIRouter()
 
@@ -10,3 +10,4 @@ api_router.include_router(inference.router, prefix="/inference", tags=["inferenc
 api_router.include_router(maps.router, prefix="/maps", tags=["maps"])
 api_router.include_router(tiles.router, prefix="/tiles", tags=["tiles"])
 api_router.include_router(cities.router, prefix="/cities", tags=["cities"])
+api_router.include_router(usage.router, prefix="/usage", tags=["usage"])

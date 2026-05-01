@@ -76,18 +76,18 @@ def get_tile_bounds(x: int, y: int, zoom: int) -> Tuple[float, float, float, flo
     return se_lat, nw_lng, nw_lat, se_lng  # min_lat, min_lng, max_lat, max_lng
 
 
-async def fetch_tile(client: httpx.AsyncClient, x: int, y: int, zoom: int, session_token: str) -> Image.Image:
-    """Fetch a single tile, returning from cache if available."""
+async def fetch_tile(client: httpx.AsyncClient, x: int, y: int, zoom: int, session_token: str) -> tuple[Image.Image, bool]:
+    """Fetch a single tile, returning from cache if available. Returns (image, was_api_fetch)."""
     cached = get_cached_tile(zoom, x, y)
     if cached:
-        return Image.open(BytesIO(cached))
+        return Image.open(BytesIO(cached)), False
 
     settings = get_settings()
     url = f"https://tile.googleapis.com/v1/2dtiles/{zoom}/{x}/{y}?session={session_token}&key={settings.google_maps_api_key}"
     response = await client.get(url)
     response.raise_for_status()
     cache_tile(zoom, x, y, response.content)
-    return Image.open(BytesIO(response.content))
+    return Image.open(BytesIO(response.content)), True
 
 
 async def fetch_tiles_for_bounds(
@@ -96,15 +96,16 @@ async def fetch_tiles_for_bounds(
     max_lat: float,
     max_lng: float,
     zoom: int = 18,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, int]:
     """
     Fetch all tiles covering a bounding box and stitch them together.
 
     Returns:
-        Tuple of (image_array, lons_array, lats_array)
+        Tuple of (image_array, lons_array, lats_array, api_fetch_count)
         - image_array: RGB image as numpy array
         - lons_array: 2D array of longitude values for each pixel
         - lats_array: 2D array of latitude values for each pixel
+        - api_fetch_count: number of tiles fetched from Google API (cache misses)
     """
     session_token = await _get_current_session()
 
@@ -132,7 +133,10 @@ async def fetch_tiles_for_bounds(
             for x in range(min_x, max_x + 1):
                 tasks.append(fetch_tile(client, x, y, zoom, session_token))
 
-        tiles = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
+
+    tiles = [r[0] for r in results]
+    api_fetch_count = sum(1 for r in results if r[1])
 
     # Stitch tiles into single image
     stitched = Image.new('RGB', (total_width, total_height))
@@ -167,7 +171,18 @@ async def fetch_tiles_for_bounds(
                     lons[start_y + py, start_x + px] = lng
                     lats[start_y + py, start_x + px] = lat
 
-    return np.array(stitched), lons, lats
+    return np.array(stitched), lons, lats, api_fetch_count
+
+
+def estimate_tile_count(min_lat: float, min_lng: float, max_lat: float, max_lng: float, zoom: int) -> int:
+    """Return the maximum number of tiles needed to cover the bounding box at the given zoom level."""
+    min_x, max_y = lat_lng_to_tile(min_lat, min_lng, zoom)
+    max_x, min_y = lat_lng_to_tile(max_lat, max_lng, zoom)
+    if min_x > max_x:
+        min_x, max_x = max_x, min_x
+    if min_y > max_y:
+        min_y, max_y = max_y, min_y
+    return (max_x - min_x + 1) * (max_y - min_y + 1)
 
 
 def calculate_optimal_zoom(min_lat: float, min_lng: float, max_lat: float, max_lng: float) -> int:
