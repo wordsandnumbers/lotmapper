@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { projectsApi, citySearchStreamUrl } from '../services/api'
@@ -160,6 +160,16 @@ function FitToPolygon({ geojson }: { geojson: GeoJSON.Geometry }) {
   return null
 }
 
+function combineGeometries(geometries: GeoJSON.Geometry[]): GeoJSON.Geometry {
+  if (geometries.length === 1) return geometries[0]
+  const polygons: GeoJSON.Position[][][] = []
+  for (const geom of geometries) {
+    if (geom.type === 'Polygon') polygons.push(geom.coordinates)
+    else if (geom.type === 'MultiPolygon') polygons.push(...geom.coordinates)
+  }
+  return { type: 'MultiPolygon', coordinates: polygons }
+}
+
 // US States outline style
 const statesStyle = {
   color: '#ffffff',
@@ -198,8 +208,15 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
   const [resolveError, setResolveError] = useState('')
   const [candidates, setCandidates] = useState<Array<{ name: string; geometry: GeoJSON.Geometry; score: number; source: string }> | null>(null)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set())
   const [boundsPolygon, setBoundsPolygon] = useState<GeoJSON.Geometry | null>(null)
   const [selectedCandidateName, setSelectedCandidateName] = useState<string | null>(null)
+
+  const combinedGeometry = useMemo(() => {
+    if (!candidates || selectedIndices.size === 0) return null
+    const geoms = Array.from(selectedIndices).map(i => candidates[i].geometry)
+    return combineGeometries(geoms)
+  }, [candidates, selectedIndices])
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -215,13 +232,13 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab)
-    // Clear other tab's selection when switching
     if (tab === 'city') {
       setBounds(null)
     } else {
       setBoundsPolygon(null)
       setCandidates(null)
       setSelectedCandidateName(null)
+      setSelectedIndices(new Set())
     }
     setError('')
   }
@@ -269,17 +286,27 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
     }
   }
 
-  const handleUseCandidate = (index: number) => {
-    if (!candidates) return
-    const candidate = candidates[index]
-    setBoundsPolygon(candidate.geometry)
-    setSelectedCandidateName(candidate.name)
-  }
+  const handleToggleCandidate = useCallback((index: number) => {
+    setSelectedIndices(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }, [])
+
+  const handleUseSelected = useCallback(() => {
+    if (!candidates || selectedIndices.size === 0 || !combinedGeometry) return
+    const names = Array.from(selectedIndices).map(i => candidates[i].name).join(' + ')
+    setBoundsPolygon(combinedGeometry)
+    setSelectedCandidateName(names)
+  }, [candidates, selectedIndices, combinedGeometry])
 
   const handleSearchAgain = () => {
     setCandidates(null)
     setBoundsPolygon(null)
     setSelectedCandidateName(null)
+    setSelectedIndices(new Set())
     setCity('')
     setStateAbbr('')
     setResolveError('')
@@ -478,15 +505,29 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-sm text-gray-600 font-medium">
-                              {candidates.length} boundary {candidates.length === 1 ? 'option' : 'options'} found — hover to preview, click "Use this" to select
+                              {candidates.length} {candidates.length === 1 ? 'option' : 'options'} found
+                              {selectedIndices.size === 0
+                                ? ' — check to select'
+                                : ` — ${selectedIndices.size} selected`}
                             </span>
-                            <button
-                              type="button"
-                              onClick={handleSearchAgain}
-                              className="px-3 py-1 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded text-sm"
-                            >
-                              Search again
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {selectedIndices.size > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={handleUseSelected}
+                                  className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded text-sm font-medium"
+                                >
+                                  {selectedIndices.size > 1 ? `Use ${selectedIndices.size} combined` : 'Use selected'}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={handleSearchAgain}
+                                className="px-3 py-1 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded text-sm"
+                              >
+                                Search again
+                              </button>
+                            </div>
                           </div>
                           <div className="flex gap-3 h-[28rem]">
                             {/* Left: candidate list */}
@@ -495,11 +536,23 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                                 <div
                                   key={i}
                                   className={`flex items-start gap-2 px-3 py-2 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                                    hoveredIndex === i ? 'bg-teal-50' : 'hover:bg-gray-50'
+                                    selectedIndices.has(i)
+                                      ? 'bg-blue-50'
+                                      : hoveredIndex === i
+                                      ? 'bg-teal-50'
+                                      : 'hover:bg-gray-50'
                                   }`}
+                                  onClick={() => handleToggleCandidate(i)}
                                   onMouseEnter={() => setHoveredIndex(i)}
                                   onMouseLeave={() => setHoveredIndex(null)}
                                 >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedIndices.has(i)}
+                                    onChange={() => handleToggleCandidate(i)}
+                                    onClick={e => e.stopPropagation()}
+                                    className="mt-1 flex-shrink-0 accent-teal-600"
+                                  />
                                   <span
                                     className="mt-1 flex-shrink-0 w-2.5 h-2.5 rounded-full"
                                     style={{ backgroundColor: c.score >= 1 ? '#0d9488' : '#94a3b8' }}
@@ -507,13 +560,6 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                                   <div className="flex-1 min-w-0">
                                     <p className="text-xs text-gray-800 leading-tight break-words">{c.name}</p>
                                     <p className="text-xs text-gray-400 mt-0.5">{sourceLabel(c.source)}</p>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUseCandidate(i)}
-                                      className="mt-1 text-xs text-teal-700 hover:text-teal-900 font-medium"
-                                    >
-                                      Use this
-                                    </button>
                                   </div>
                                 </div>
                               ))}
@@ -532,17 +578,30 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                                 />
                                 {candidates.map((c, i) => (
                                   <GeoJSON
-                                    key={`${i}-${hoveredIndex === i}`}
+                                    key={`${i}-${hoveredIndex === i}-${selectedIndices.has(i)}`}
                                     data={c.geometry as GeoJSON.GeoJsonObject}
                                     style={{
-                                      color: '#0d9488',
-                                      weight: hoveredIndex === i ? 3 : 2,
-                                      fillColor: '#0d9488',
-                                      fillOpacity: hoveredIndex === i ? 0.35 : 0.05,
-                                      opacity: hoveredIndex === i ? 1 : 0.6,
+                                      color: selectedIndices.has(i) ? '#2563eb' : '#94a3b8',
+                                      weight: hoveredIndex === i ? 3 : 1.5,
+                                      fillColor: selectedIndices.has(i) ? '#2563eb' : '#94a3b8',
+                                      fillOpacity: selectedIndices.has(i) ? 0.18 : hoveredIndex === i ? 0.12 : 0.03,
+                                      opacity: selectedIndices.has(i) ? 1 : hoveredIndex === i ? 0.8 : 0.45,
                                     }}
                                   />
                                 ))}
+                                {combinedGeometry && selectedIndices.size > 1 && (
+                                  <GeoJSON
+                                    key={`union-${Array.from(selectedIndices).sort().join(',')}`}
+                                    data={combinedGeometry as GeoJSON.GeoJsonObject}
+                                    style={{
+                                      color: '#0d9488',
+                                      weight: 3,
+                                      fillColor: '#0d9488',
+                                      fillOpacity: 0.2,
+                                      opacity: 1,
+                                    }}
+                                  />
+                                )}
                                 <FitToPolygon geojson={candidates[0].geometry} />
                               </MapContainer>
                             </div>
