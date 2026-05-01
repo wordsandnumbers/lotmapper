@@ -1,0 +1,42 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+
+  db:
+    restart: unless-stopped
+
+  rabbitmq:
+    restart: unless-stopped
+
+  backend:
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/parking_lots
+      - SECRET_KEY=${SECRET_KEY}
+      - CORS_ORIGINS=["https://${DOMAIN}"]
+      - HF_HOME=/app/.cache/huggingface
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
+      - RABBITMQ_URL=amqp://parking:parking@rabbitmq:5672/
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    restart: unless-stopped
+
+  frontend:
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

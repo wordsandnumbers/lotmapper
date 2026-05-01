@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: parking_lots
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,9 +20,9 @@ services:
     command: >
       sh -c "rabbitmq-plugins enable rabbitmq_stream rabbitmq_stream_management && rabbitmq-server"
     ports:
-      - "5672:5672"    # AMQP
-      - "5552:5552"    # Stream protocol
-      - "15672:15672"  # management UI
+      - "127.0.0.1:5672:5672"    # AMQP
+      - "127.0.0.1:5552:5552"    # Stream protocol
+      - "127.0.0.1:15672:15672"  # management UI
     environment:
       RABBITMQ_DEFAULT_USER: parking
       RABBITMQ_DEFAULT_PASS: parking
@@ -35,7 +35,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/parking_lots
       - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
@@ -78,7 +78,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"
     depends_on:
       - backend
 
