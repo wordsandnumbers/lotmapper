@@ -42,14 +42,9 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    setPage(1)
-    loadProjects(1)
-  }, [statusFilter])
-
-  useEffect(() => {
     loadProjects(page)
     window.scrollTo(0, 0)
-  }, [page])
+  }, [page, statusFilter])
 
   const handleProjectCreated = () => {
     setShowCreateModal(false)
@@ -101,7 +96,7 @@ export default function Dashboard() {
         <div className="mb-4">
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
             className="border border-gray-300 rounded-md px-3 py-2 text-sm"
           >
             <option value="">All Statuses</option>
