@@ -285,9 +285,9 @@ export default function Editor() {
   }
 
   return (
-    <div className="h-[calc(100vh-64px)] flex">
+    <div className="h-[calc(100vh-64px)] flex flex-col sm:flex-row">
       {/* Sidebar */}
-      <div className="w-80 bg-white shadow-lg p-4 overflow-y-auto">
+      <div className="w-full sm:w-80 sm:flex-shrink-0 bg-white shadow-lg p-4 overflow-y-auto max-h-[45vh] sm:max-h-none">
         <button
           onClick={() => navigate('/dashboard')}
           className="text-blue-600 hover:text-blue-800 mb-4 flex items-center"
@@ -444,7 +444,7 @@ export default function Editor() {
       </div>
 
       {/* Map */}
-      <div className="flex-1">
+      <div className="flex-1 min-h-0">
         <MapContainer
           center={[0, 0]}
           zoom={2}
