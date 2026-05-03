@@ -22,8 +22,10 @@ export default function Layout() {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
-                <Link to="/dashboard" className="text-xl font-bold text-gray-900">
-                  Parking Lot Mapper
+                <Link to="/dashboard">
+                  <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center">
+                    <span className="text-white font-bold text-lg leading-none">P</span>
+                  </div>
                 </Link>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
@@ -38,7 +40,7 @@ export default function Layout() {
               </div>
             </div>
             <div className="flex items-center">
-              <span className="text-sm text-gray-500 mr-4">
+              <span className="hidden sm:block text-sm text-gray-500 mr-4">
                 {user?.email} ({user?.role})
               </span>
               <button

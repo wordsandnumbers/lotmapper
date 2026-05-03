@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { projectsApi } from '../services/api'
-import { useAuthStore } from '../store/auth'
 import CreateProjectModal from '../components/CreateProjectModal'
 
 interface Project {
@@ -22,10 +21,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>('')
-  const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState(false)
   const navigate = useNavigate()
-  const { user } = useAuthStore()
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -49,20 +45,6 @@ export default function Dashboard() {
   const handleProjectCreated = () => {
     setShowCreateModal(false)
     loadProjects()
-  }
-
-  const handleDelete = async (projectId: string) => {
-    setDeleting(true)
-    try {
-      await projectsApi.delete(projectId)
-      setDeleteProjectId(null)
-      loadProjects()
-    } catch (error) {
-      console.error('Failed to delete project:', error)
-      alert('Failed to delete project. Please try again.')
-    } finally {
-      setDeleting(false)
-    }
   }
 
   const getStatusBadgeClass = (status: string) => {
@@ -155,35 +137,6 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </button>
-                      {user?.role === 'admin' && (
-                        <div className="px-4">
-                          {deleteProjectId === project.id ? (
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleDelete(project.id)}
-                                disabled={deleting}
-                                className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
-                              >
-                                {deleting ? 'Deleting...' : 'Confirm'}
-                              </button>
-                              <button
-                                onClick={() => setDeleteProjectId(null)}
-                                disabled={deleting}
-                                className="text-gray-500 hover:text-gray-700 text-sm"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setDeleteProjectId(project.id)}
-                              className="text-red-600 hover:text-red-800 text-sm font-medium"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      )}
                     </div>
                   </li>
                 ))}

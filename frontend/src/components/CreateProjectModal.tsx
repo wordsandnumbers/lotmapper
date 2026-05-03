@@ -369,7 +369,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
       className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50"
       onClick={handleBackdropClick}
     >
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[95vh] overflow-hidden">
+      <div className="flex flex-col bg-white w-full h-full sm:rounded-lg sm:shadow-xl sm:max-w-6xl sm:h-auto sm:max-h-[95vh] overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
           <h2 className="text-xl font-semibold text-gray-900">Create New Project</h2>
           <button
@@ -381,8 +381,8 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="p-6 space-y-4 overflow-y-auto max-h-[calc(95vh-140px)]">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
             {error && (
               <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded">
                 {error}
@@ -503,7 +503,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                       {/* Candidates phase */}
                       {candidates && (
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <span className="text-sm text-gray-600 font-medium">
                               {candidates.length} {candidates.length === 1 ? 'option' : 'options'} found
                               {selectedIndices.size === 0
@@ -529,9 +529,9 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                               </button>
                             </div>
                           </div>
-                          <div className="flex gap-3 h-[28rem]">
+                          <div className="flex flex-col h-[calc(100vh-450px)] min-h-[180px] sm:flex-row sm:h-[28rem] gap-3">
                             {/* Left: candidate list */}
-                            <div className="w-48 flex-shrink-0 overflow-y-auto border border-gray-200 rounded-md">
+                            <div className="flex-shrink-0 overflow-y-auto border border-gray-200 rounded-md max-h-[35%] sm:max-h-none sm:w-48 sm:flex-shrink-0">
                               {candidates.map((c, i) => (
                                 <div
                                   key={i}
@@ -566,7 +566,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                             </div>
 
                             {/* Right: map showing all candidates */}
-                            <div className="flex-1 border border-gray-300 rounded-md overflow-hidden">
+                            <div className="flex-1 min-h-0 border border-gray-300 rounded-md overflow-hidden">
                               <MapContainer
                                 center={[39.8283, -98.5795]}
                                 zoom={4}
@@ -623,7 +623,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                           Change
                         </button>
                       </div>
-                      <div className="h-[28rem] border border-gray-300 rounded-md overflow-hidden">
+                      <div className="h-[20rem] sm:h-[28rem] border border-gray-300 rounded-md overflow-hidden">
                         <MapContainer
                           center={[39.8283, -98.5795]}
                           zoom={4}
@@ -652,7 +652,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                   <p className="text-sm text-gray-500 mb-2">
                     Click the rectangle button, then click and drag on the map to select an area.
                   </p>
-                  <div className="h-[32rem] border border-gray-300 rounded-md overflow-hidden">
+                  <div className="h-[20rem] sm:h-[32rem] border border-gray-300 rounded-md overflow-hidden">
                     <MapContainer
                       center={[39.8283, -98.5795]}
                       zoom={4}
