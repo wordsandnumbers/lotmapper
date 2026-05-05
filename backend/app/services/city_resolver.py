@@ -76,9 +76,9 @@ _DOWNTOWN_ZONE_TOKEN_RE = re.compile(
     r"^("
     r"CBD"                          # Central Business District (very common)
     r"|DT-?\d*"                     # DT, DT-1, DT1
-    r"|D-?\d+"                      # D1, D-1, D5 (standalone downtown districts)
+    r"|D(?:-?\d+)?"                 # D, D1, D-1, D5 (standalone downtown districts)
     r"|MX-?[3-9]"                   # MX-3 through MX-9 (high-density mixed use)
-    r"|C-?[5-9]"                    # C-5, C5, C6 (commercial core)
+    r"|C-?[5-9](-\w+)?"             # C5, C6, C6-4, C6-3X (NYC sub-district variants)
     r"|B-?[4-9]"                    # B-4, B4 (high-density business)
     r"|CMX-?[3-9]"                  # CMX-3 (Philadelphia commercial mixed-use)
     r"|CB-?\d+"                     # CB-1…CB-6 (Lubbock/other Central Business sub-zones)
@@ -122,6 +122,73 @@ def _extract_name(props: dict) -> Optional[str]:
         if val and isinstance(val, str) and val.strip():
             return val.strip()
     return None
+
+
+def _detect_zone_field(features: List[dict]) -> Optional[str]:
+    """Return the first property key that matches a known zone field name."""
+    if not features:
+        return None
+    zone_keys_lower = {f.lower() for f in ZONE_FIELDS}
+    for feature in features[:10]:
+        props = feature.get("properties", {}) or {}
+        for key in props:
+            if key.lower() in zone_keys_lower:
+                return key
+    return None
+
+
+async def _fetch_by_downtown_zone_codes(
+    query_url: str, zone_field: str, spatial_params: dict
+) -> List[dict]:
+    """Query distinct zone codes, filter to downtown ones, fetch their features.
+    Used as a targeted fallback when normal pagination can't reach downtown codes
+    in large multi-city merged zoning datasets (e.g. San Antonio 35k features)."""
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.get(query_url, params={
+                "where": "1=1",
+                "outFields": zone_field,
+                "returnDistinctValues": "true",
+                "returnGeometry": "false",
+                "resultRecordCount": 2000,
+                "f": "json",
+                **spatial_params,
+            })
+            r.raise_for_status()
+            data = r.json()
+
+        codes: set = set()
+        for f in data.get("features", []):
+            attrs = f.get("attributes", {})
+            for k, v in attrs.items():
+                if k.lower() == zone_field.lower() and v and isinstance(v, str) and v.strip():
+                    codes.add(v.strip())
+
+        downtown_codes = [c for c in codes if _is_downtown_zone_code(c)]
+        if not downtown_codes:
+            return []
+
+        all_features: List[dict] = []
+        for code in downtown_codes:
+            safe_code = code.replace("'", "''")
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    r = await client.get(query_url, params={
+                        "where": f"{zone_field} = '{safe_code}'",
+                        "outFields": "*",
+                        "returnGeometry": "true",
+                        "f": "geojson",
+                        **spatial_params,
+                    })
+                    r.raise_for_status()
+                    all_features.extend(r.json().get("features", []))
+            except Exception as e:
+                logger.debug(f"Targeted zone query failed for {code!r}: {e}")
+
+        return all_features
+    except Exception as e:
+        logger.debug(f"Distinct zone code query failed for {query_url}: {e}")
+        return []
 
 
 async def _try_arcgis(city: str, state: str) -> Optional[Tuple[dict, str]]:
@@ -293,8 +360,12 @@ async def _get_service_layer_urls(base_url: str) -> List[str]:
     return [f"{base_url}/0"]
 
 
-async def _query_service_for_candidates(url: str, service_title: str = "") -> List[dict]:
-    """Query one ArcGIS FeatureServer URL and return all named polygon features."""
+async def _query_service_for_candidates(
+    url: str, service_title: str = "", centroid: Optional["Point"] = None
+) -> List[dict]:
+    """Query one ArcGIS FeatureServer URL and return all named polygon features.
+    If centroid is provided, adds a 1°×1° spatial bounding-box filter so that
+    large multi-city merged datasets (e.g. 35k+ features) don't swamp pagination."""
     url = url.rstrip("/")
 
     # If URL already ends with a layer number use it directly; otherwise discover
@@ -304,37 +375,59 @@ async def _query_service_for_candidates(url: str, service_title: str = "") -> Li
     else:
         layer_urls = await _get_service_layer_urls(url)
 
+    # Build spatial filter params once (reused for every page/layer).
+    spatial_params: dict = {}
+    if centroid:
+        spatial_params = {
+            "geometry": f"{centroid.x - 0.5},{centroid.y - 0.5},{centroid.x + 0.5},{centroid.y + 0.5}",
+            "geometryType": "esriGeometryEnvelope",
+            "spatialRel": "esriSpatialRelIntersects",
+            "inSR": "4326",
+        }
+
     all_features: List[dict] = []
     for layer_url in layer_urls:
         query_url = layer_url + "/query"
         page_size = 1000
         offset = 0
+        zone_field: Optional[str] = None
+        hit_limit = False
         while True:
             try:
+                params = {
+                    "where": "1=1",
+                    "outFields": "*",
+                    "returnGeometry": "true",
+                    "resultRecordCount": page_size,
+                    "resultOffset": offset,
+                    "f": "geojson",
+                    **spatial_params,
+                }
                 async with httpx.AsyncClient(timeout=20.0) as client:
-                    r = await client.get(
-                        query_url,
-                        params={
-                            "where": "1=1",
-                            "outFields": "*",
-                            "returnGeometry": "true",
-                            "resultRecordCount": page_size,
-                            "resultOffset": offset,
-                            "f": "geojson",
-                        },
-                    )
+                    r = await client.get(query_url, params=params)
                     r.raise_for_status()
                     fc = r.json()
                 page_features = fc.get("features", [])
+                if offset == 0 and not zone_field:
+                    zone_field = _detect_zone_field(page_features)
                 all_features.extend(page_features)
                 # Only paginate if we got a full page AND total is small enough to be worth it
                 if len(page_features) == page_size and len(all_features) < 5000:
                     offset += page_size
                 else:
+                    if len(all_features) >= 5000:
+                        hit_limit = True
                     break
             except Exception as e:
                 logger.debug(f"ArcGIS feature fetch failed for {layer_url} offset={offset}: {e}")
                 break
+
+        # Large zoning datasets (e.g. multi-city merged layers) may have downtown zone
+        # codes beyond the 5000-record pagination cutoff. Always run targeted queries
+        # when we hit the limit on a zone-field layer — dedup handles overlaps.
+        if hit_limit and zone_field:
+            targeted = await _fetch_by_downtown_zone_codes(query_url, zone_field, spatial_params)
+            all_features.extend(targeted)
 
     if not all_features:
         return []
@@ -373,8 +466,10 @@ async def _query_service_for_candidates(url: str, service_title: str = "") -> Li
             area = shape(geom).area
         except Exception:
             continue
-        # Skip near-zero area features (parcels, point-like polygons) — min ~0.1 km²
-        if area < 1e-5:
+        # Skip degenerate/point-like polygons only; the real area threshold is
+        # applied after grouping so that zone codes spread across many small
+        # individual polygons (e.g. NYC C6 blocks) can be unioned first.
+        if area < 1e-9:
             continue
         # Skip purely numeric names (e.g. voting precinct "03") and bare compass directions
         if name.strip().lstrip("0").isdigit() or name.strip() == "0":
@@ -390,11 +485,19 @@ async def _query_service_for_candidates(url: str, service_title: str = "") -> Li
         )
         normalized_title = service_title.replace("_", " ")
         all_text = f"{all_props_text} {normalized_title}".strip()
-        score = 1 if (
+        # score=2: the feature name IS a downtown zone code (e.g. "B-4", "CBD") —
+        # these should rank above neighborhood/district names (score=1) so they
+        # aren't crowded out of the top-10 cutoff by softer keyword matches.
+        if _is_downtown_zone_code(name):
+            score = 2
+        elif (
             service_is_downtown
             or _contains_downtown_keyword(all_text)
             or _is_downtown_zone_code(all_text)
-        ) else 0
+        ):
+            score = 1
+        else:
+            score = 0
         raw.append({"name": name, "geometry": geom, "score": score, "_area": area})
 
     if not raw:
@@ -409,19 +512,24 @@ async def _query_service_for_candidates(url: str, service_title: str = "") -> Li
     results = []
     for group in groups.values():
         if len(group) == 1:
-            results.append(group[0])
+            candidate = group[0]
         else:
             try:
                 merged = unary_union([shape(r["geometry"]) for r in group])
                 best = max(group, key=lambda r: r["score"])
-                results.append({
+                candidate = {
                     "name": best["name"],
                     "geometry": mapping(merged),
                     "score": best["score"],
                     "_area": merged.area,
-                })
+                }
             except Exception:
-                results.append(group[0])  # fallback: keep first
+                candidate = group[0]  # fallback: keep first
+        # Skip groups whose total area is too small — filters parcel-level
+        # datasets while still allowing zone codes made up of many small polygons.
+        if candidate["_area"] < 1e-5:
+            continue
+        results.append(candidate)
 
     return results
 
@@ -493,7 +601,9 @@ def _is_arcgis_service_url(url: str) -> bool:
     return False
 
 
-async def _hub_search_and_fetch(query: str, num: int = 5) -> List[dict]:
+async def _hub_search_and_fetch(
+    query: str, num: int = 5, centroid: Optional["Point"] = None
+) -> List[dict]:
     """Search Hub API and fetch polygon features from matching datasets."""
     items = await _hub_search(query, num=num)
     best: List[dict] = []
@@ -506,16 +616,42 @@ async def _hub_search_and_fetch(query: str, num: int = 5) -> List[dict]:
         name_lower = dataset_name.lower()
         if any(kw in name_lower for kw in SKIP_SERVICE_KEYWORDS):
             continue
-        batch = await _query_service_for_candidates(url, service_title=dataset_name)
-        if any(c["score"] >= 1 for c in batch):
-            return batch  # High-confidence hit — stop immediately
+        batch = await _query_service_for_candidates(url, service_title=dataset_name, centroid=centroid)
+        if any(c["score"] >= 2 for c in batch):
+            return batch  # Zone-code hit — stop immediately
         if batch and not best:
             best = batch
     return best
 
 
-async def _arcgis_search_and_fetch(query: str, num: int = 5) -> List[dict]:
-    """Search ArcGIS Online and fetch candidates, preferring score≥1 results."""
+async def _service_has_features_near(url: str, centroid: "Point", max_dist: float = 0.5) -> bool:
+    """Fetch one feature from a service and check if it's near the centroid.
+    Used to skip datasets that are geographically wrong (e.g. Albany when searching NYC)."""
+    layer_url = url.rstrip("/")
+    if not re.search(r"/\d+$", layer_url):
+        layer_url += "/0"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                layer_url + "/query",
+                params={"where": "1=1", "outFields": "OBJECTID", "returnGeometry": "true",
+                        "resultRecordCount": 1, "f": "geojson"},
+            )
+            r.raise_for_status()
+            features = r.json().get("features", [])
+        if features:
+            geom = features[0].get("geometry", {})
+            return _is_near_city(geom, centroid, max_dist)
+    except Exception:
+        pass
+    return True  # Don't skip if the probe fails
+
+
+async def _arcgis_search_and_fetch(
+    query: str, num: int = 5, centroid: Optional["Point"] = None
+) -> List[dict]:
+    """Search ArcGIS Online and fetch candidates, preferring score≥2 (zone code) results.
+    If centroid is provided, datasets whose first feature is >0.5° away are skipped."""
     results = await _arcgis_search(query, num=num)
     best: List[dict] = []
     for item in results[:5]:
@@ -525,9 +661,11 @@ async def _arcgis_search_and_fetch(query: str, num: int = 5) -> List[dict]:
         title_lower = (item.get("title") or "").lower()
         if any(kw in title_lower for kw in SKIP_SERVICE_KEYWORDS):
             continue
+        if centroid and not await _service_has_features_near(url, centroid):
+            continue  # Dataset is from a different city — skip without full fetch
         batch = await _query_service_for_candidates(url, service_title=item.get("title", ""))
-        if any(c["score"] >= 1 for c in batch):
-            return batch  # High-confidence hit — stop immediately
+        if any(c["score"] >= 2 for c in batch):
+            return batch  # Zone-code hit — stop immediately
         if batch and not best:
             best = batch  # Keep first non-empty as fallback
     return best
@@ -565,6 +703,11 @@ async def get_candidates(
     """
     candidates: List[dict] = []
 
+    # --- Centroid lookup (fast, ~1s) — done first so Stage 1 can apply spatial
+    # filtering on large multi-city merged datasets like San Antonio's 35k-feature
+    # area zoning layer where target-city features appear beyond the 5000-record page cap ---
+    centroid = await _get_city_centroid(city, state)
+
     # --- Stage 1: Hub API ---
     await _emit(progress_cb, f"Searching ArcGIS Hub for {city}, {state}...")
     hub_queries = [
@@ -576,13 +719,12 @@ async def get_candidates(
         f"{city} {state} zoning districts",
         f"{city} {state} zoning",
     ]
-    hub_batches = await asyncio.gather(*[_hub_search_and_fetch(q) for q in hub_queries])
+    hub_batches = await asyncio.gather(*[_hub_search_and_fetch(q, centroid=centroid) for q in hub_queries])
     for batch in hub_batches:
         _tag_source(batch, "arcgis_hub")
         candidates.extend(batch)
 
     # --- Geographic filter ---
-    centroid = await _get_city_centroid(city, state)
     if candidates and centroid:
         candidates = [c for c in candidates if _is_near_city(c["geometry"], centroid)]
 
@@ -592,16 +734,24 @@ async def get_candidates(
     elif candidates:
         await _emit(progress_cb, f"Found {len(candidates)} nearby area{'s' if len(candidates) != 1 else ''}, no exact downtown match")
 
-    # --- Stage 2: ArcGIS Online search if no high-confidence results ---
-    if not any(c["score"] >= 1 for c in candidates):
-        await _emit(progress_cb, "Trying ArcGIS Online search...")
-        arcgis_queries = [
-            f"downtown {city}",
-            f"{city} {state} downtown district",
-            f"{city} {state} neighborhood boundary",
-            f"{city} {state} zoning districts",
-        ]
-        arcgis_batches = await asyncio.gather(*[_arcgis_search_and_fetch(q) for q in arcgis_queries])
+    # --- Stage 2: ArcGIS Online search if no zone-code (score≥2) results ---
+    # If Hub already found neighborhood names (score=1), only run a single targeted
+    # zoning query — avoids 4 parallel ArcGIS calls just to supplement neighborhood data.
+    # If Hub found nothing useful, run the full 4-query set.
+    if not any(c["score"] >= 2 for c in candidates):
+        has_neighborhoods = any(c["score"] >= 1 for c in candidates)
+        if has_neighborhoods:
+            await _emit(progress_cb, "Searching ArcGIS Online for zoning districts...")
+            arcgis_queries = [f"{city} {state} zoning districts"]
+        else:
+            await _emit(progress_cb, "Trying ArcGIS Online search...")
+            arcgis_queries = [
+                f"downtown {city}",
+                f"{city} {state} downtown district",
+                f"{city} {state} neighborhood boundary",
+                f"{city} {state} zoning districts",
+            ]
+        arcgis_batches = await asyncio.gather(*[_arcgis_search_and_fetch(q, centroid=centroid) for q in arcgis_queries])
         for batch in arcgis_batches:
             _tag_source(batch, "arcgis_online")
             candidates.extend(batch)
@@ -610,6 +760,8 @@ async def get_candidates(
             candidates = [c for c in candidates if _is_near_city(c["geometry"], centroid)]
 
     # --- Stage 3: org-ID discovery if still no high-confidence results ---
+    # This is a last resort for cities with zero Hub/ArcGIS Online data.
+    # Skip if Hub found neighborhoods (score=1) — we have a usable result.
     if not any(c["score"] >= 1 for c in candidates):
         await _emit(progress_cb, "Discovering city organization datasets...")
         # Run broad searches and direct portal lookup in parallel.
@@ -669,7 +821,8 @@ async def get_candidates(
         geom = await _fallback_city_buffer(city, state)
         return [{"name": "Estimated downtown (800m radius)", "geometry": geom, "score": -1, "source": "fallback"}]
 
-    # Deduplicate by name, sort: score desc then area asc, return top 10
+    # Deduplicate by name, sort: score desc then for zone codes (score≥2) area desc
+    # (larger zone = primary downtown), for others area asc (more focused first).
     seen: set = set()
     deduped = []
     for c in candidates:
@@ -678,7 +831,7 @@ async def get_candidates(
             seen.add(key)
             deduped.append(c)
 
-    deduped.sort(key=lambda c: (-c["score"], c["_area"]))
+    deduped.sort(key=lambda c: (-c["score"], -c["_area"] if c["score"] >= 2 else c["_area"]))
     return [
         {"name": c["name"], "geometry": c["geometry"], "score": c["score"], "source": c.get("source", "arcgis_hub")}
         for c in deduped[:10]
