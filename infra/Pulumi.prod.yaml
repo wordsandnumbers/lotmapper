@@ -1,0 +1,4 @@
+config:
+  aws:region: us-east-1
+  parking-lot-infra:appInstanceType: t3.small
+  parking-lot-infra:allowedSshCidr: 0.0.0.0/0

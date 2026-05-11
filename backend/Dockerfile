@@ -1,5 +1,11 @@
 FROM python:3.11-slim
 
+ARG BUILD_SHA=dev
+ARG SEMVER=0.0.0
+ENV APP_VERSION=v${SEMVER}+git-${BUILD_SHA}
+LABEL org.opencontainers.image.revision=${BUILD_SHA}
+LABEL org.opencontainers.image.version=${SEMVER}
+
 WORKDIR /app
 
 # Install system dependencies for OpenCV and PostGIS
