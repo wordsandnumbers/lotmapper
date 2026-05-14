@@ -146,8 +146,8 @@ apt update && apt install -y docker.io docker-compose-plugin git jq
 usermod -aG docker $USER && newgrp docker
 
 # Clone repo
-git clone https://github.com/wordsandnumbers/parking-lot-app /opt/parking-lot-app
-cd /opt/parking-lot-app && git checkout main
+git clone https://github.com/wordsandnumbers/parking-lot-app /opt/lotmapper
+cd /opt/lotmapper && git checkout main
 
 # Write .env (never committed — contains real secrets)
 cat > .env << EOF
@@ -186,7 +186,7 @@ Trigger the **Rollback** workflow from the GitHub Actions UI. Enter the short gi
 
 ```bash
 ssh root@<droplet-ip>
-cd /opt/parking-lot-app
+cd /opt/lotmapper
 
 # Deploy a specific version
 git pull origin main
