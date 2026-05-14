@@ -76,7 +76,7 @@ jobs:
             set -e
             cd /opt/lotmapper
 
-            git pull origin main
+            git pull --ff-only origin feature/digitalocean-deploy
 
             # Pin the deployed version in .env
             if grep -q "^IMAGE_TAG=" .env; then
