@@ -134,6 +134,81 @@ If you use this tool or its outputs in research, please cite the model it is bui
 }
 ```
 
+## Production Deployment (DigitalOcean)
+
+The app deploys to a DigitalOcean Droplet via GitHub Actions. Images are built and pushed to GHCR on every push to `main`, then pulled onto the Droplet.
+
+### One-time Droplet setup
+
+```bash
+# Install Docker
+apt update && apt install -y docker.io docker-compose-plugin git jq
+usermod -aG docker $USER && newgrp docker
+
+# Clone repo
+git clone https://github.com/wordsandnumbers/parking-lot-app /opt/lotmapper
+cd /opt/lotmapper && git checkout main
+
+# Write .env (never committed — contains real secrets)
+cat > .env << EOF
+SECRET_KEY=$(openssl rand -hex 32)
+GOOGLE_MAPS_API_KEY=<your-key>
+DOMAIN=<your-domain>
+EOF
+
+# Initial start (builds images locally before CI/CD has pushed any)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+# Create first admin user
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend \
+  python scripts/create_admin.py admin@example.com <password>
+```
+
+### GitHub Secrets required
+
+| Secret | Description |
+|---|---|
+| `DO_HOST` | Droplet public IP |
+| `DO_USER` | SSH user (`root` or deploy user) |
+| `DO_SSH_KEY` | Private SSH key for Droplet access |
+
+`GITHUB_TOKEN` is automatic — no setup needed for GHCR push.
+
+### CI/CD
+
+Push to `main` → builds backend + frontend images → pushes to GHCR → SSHs into Droplet → `docker compose pull && up`. Takes ~3–4 minutes. `db`, `rabbitmq`, and `caddy` are not restarted on deploys.
+
+### Rollback
+
+Trigger the **Rollback** workflow from the GitHub Actions UI. Enter the short git SHA (e.g. `abc1234`) to roll back to. Migrations are not reversed — they are forward-only.
+
+### Manual deploy / rollback
+
+```bash
+ssh root@<droplet-ip>
+cd /opt/lotmapper
+
+# Deploy a specific version
+git pull origin main
+sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=git-<sha>/" .env
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend worker frontend
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend worker frontend
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T backend alembic upgrade head
+```
+
+### Bumping the app version
+
+```bash
+npm version patch   # 1.0.0 → 1.0.1  (bug fix)
+npm version minor   # 1.0.0 → 1.1.0  (new feature)
+npm version major   # 1.0.0 → 2.0.0  (breaking change)
+git push && git push --tags
+```
+
+`npm version` bumps `package.json`, commits, and creates a git tag automatically. The version is baked into every Docker image as `v1.0.0+git-<sha>` and visible at `GET /health`, in worker logs, the `/docs` page, and the browser console.
+
+---
+
 ## Development Notes
 
 - **Frontend changes** require a rebuild: `docker compose build frontend && docker compose up -d frontend`

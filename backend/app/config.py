@@ -5,6 +5,7 @@ from functools import lru_cache
 class Settings(BaseSettings):
     # App
     app_name: str = "Parking Lot Mapping Tool"
+    app_version: str = "v0.0.0+git-dev"
     debug: bool = False
 
     # Database
