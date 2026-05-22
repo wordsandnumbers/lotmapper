@@ -32,8 +32,16 @@ export const authApi = {
     const response = await api.post('/auth/login', { email, password })
     return response.data
   },
-  register: async (email: string, password: string) => {
-    const response = await api.post('/auth/register', { email, password })
+  requestAccess: async (email: string) => {
+    const response = await api.post('/auth/request-access', { email })
+    return response.data
+  },
+  setPassword: async (token: string, password: string) => {
+    const response = await api.post('/auth/set-password', { token, password })
+    return response.data
+  },
+  inviteUser: async (email: string) => {
+    const response = await api.post('/auth/invite', { email })
     return response.data
   },
   getMe: async () => {
