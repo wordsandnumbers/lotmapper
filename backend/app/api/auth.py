@@ -1,6 +1,7 @@
+from datetime import timedelta
 from typing import List
 from uuid import UUID
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -23,6 +24,7 @@ from app.core.security import (
 )
 from app.config import get_settings
 from app.api.deps import get_current_active_user
+from app.core.limiter import email_limiter, limiter
 from app.services import email as email_service
 
 router = APIRouter()
@@ -49,7 +51,9 @@ def _send_signup_link(
 
 
 @router.post("/request-access", response_model=dict)
+@limiter.limit("3/hour")
 async def request_access(
+    request: Request,
     payload: AccessRequest,
     background: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -59,6 +63,14 @@ async def request_access(
     Always returns the same shape regardless of whether the email is new,
     duplicate, or already an active user — prevents account enumeration.
     """
+    if not email_limiter.hit(
+        f"request-access:{payload.email}", limit=1, window=timedelta(days=1)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests for this email — try again later",
+        )
+
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing is None:
         user = User(
@@ -156,8 +168,19 @@ async def invite_user(
 
 
 @router.post("/login", response_model=Token)
-async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login(
+    request: Request, login_data: LoginRequest, db: Session = Depends(get_db)
+):
     """Login and get access token."""
+    if not email_limiter.hit(
+        f"login:{login_data.email}", limit=20, window=timedelta(hours=1)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts for this account — try again later",
+        )
+
     user = db.query(User).filter(User.email == login_data.email).first()
     if (
         not user

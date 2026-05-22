@@ -47,3 +47,6 @@ rstream==1.0.0
 
 # Email
 resend==2.4.0
+
+# Rate limiting
+slowapi==0.1.9

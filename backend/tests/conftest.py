@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.api.auth import router as auth_router
+from app.core.limiter import email_limiter, limiter
 from app.core.security import create_access_token, get_password_hash
 from app.database import SessionLocal, engine, get_db
 from app.models.user import User
@@ -52,13 +53,45 @@ def db_session():
         connection.close()
 
 
+@pytest.fixture(autouse=True)
+def _disable_rate_limits():
+    """Rate limits are off by default in tests.
+
+    Tests that exercise rate limiting can opt back in via the
+    `enable_rate_limits` fixture.
+    """
+    limiter.enabled = False
+    email_limiter.enabled = False
+    email_limiter.reset()
+    yield
+    limiter.enabled = False
+    email_limiter.enabled = False
+
+
+@pytest.fixture
+def enable_rate_limits():
+    """Opt-in fixture: re-enable both limiters for tests that hit them."""
+    limiter.reset()
+    limiter.enabled = True
+    email_limiter.reset()
+    email_limiter.enabled = True
+    yield
+    limiter.enabled = False
+    email_limiter.enabled = False
+
+
 @pytest.fixture
 def client(db_session):
     """FastAPI TestClient wired to the transactional session.
 
     Mounts only the auth router (skipping the main app's RabbitMQ lifespan).
     """
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+
     app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.include_router(auth_router, prefix="/auth")
 
     def override_get_db():
