@@ -1,5 +1,3 @@
-import secrets
-from datetime import datetime, timedelta
 from typing import List
 from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -18,14 +16,14 @@ from app.schemas.user import (
 )
 from app.core.security import (
     create_access_token,
+    create_signup_token,
+    decode_signup_token,
     get_password_hash,
     verify_password,
 )
 from app.config import get_settings
 from app.api.deps import get_current_active_user
 from app.services import email as email_service
-
-SIGNUP_TOKEN_TTL_HOURS = 72
 
 router = APIRouter()
 settings = get_settings()
@@ -35,19 +33,13 @@ def _signup_link(token: str) -> str:
     return f"{settings.app_base_url.rstrip('/')}/set-password?token={token}"
 
 
-def _issue_signup_link(
+def _send_signup_link(
     background: BackgroundTasks,
-    db: Session,
     user: User,
     invited_by: str | None = None,
 ) -> None:
-    """Mint a random signup token, persist it on the user, queue the email."""
-    user.signup_token = secrets.token_urlsafe(24)
-    user.signup_token_expires_at = datetime.utcnow() + timedelta(
-        hours=SIGNUP_TOKEN_TTL_HOURS
-    )
-    db.commit()
-    link = _signup_link(user.signup_token)
+    token = create_signup_token(user.id)
+    link = _signup_link(token)
     background.add_task(
         email_service.send_signup_link_email,
         user.email,
@@ -100,12 +92,15 @@ async def set_password(payload: SetPasswordRequest, db: Session = Depends(get_db
             detail="Password must be at least 8 characters",
         )
 
-    user = db.query(User).filter(User.signup_token == payload.token).first()
-    if (
-        not user
-        or user.signup_token_expires_at is None
-        or user.signup_token_expires_at < datetime.utcnow()
-    ):
+    user_id = decode_signup_token(payload.token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This link is invalid or expired",
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or user.password_hash is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This link is invalid or expired",
@@ -113,8 +108,6 @@ async def set_password(payload: SetPasswordRequest, db: Session = Depends(get_db
 
     user.password_hash = get_password_hash(payload.password)
     user.is_active = True
-    user.signup_token = None
-    user.signup_token_expires_at = None
     db.commit()
     db.refresh(user)
 
@@ -158,7 +151,7 @@ async def invite_user(
     db.commit()
     db.refresh(user)
 
-    _issue_signup_link(background, db, user, invited_by=current_user.email)
+    _send_signup_link(background, user, invited_by=current_user.email)
     return user
 
 
@@ -257,7 +250,7 @@ async def update_user(
     db.refresh(user)
 
     if becomes_active:
-        _issue_signup_link(background, db, user)
+        _send_signup_link(background, user)
     return user
 
 

@@ -105,7 +105,7 @@ There are two paths into the app, both ending at a "Set Password" page reached v
 
 1. Request creates a pending user row and emails all active Owners.
 2. An Owner opens the Admin page and activates the request.
-3. Activation emails the requester a single-use signup link (~32-char token, 72h TTL).
+3. Activation emails the requester a single-use signup link (signed JWT, 72h TTL).
 4. The requester clicks the link, sets a password, and is logged in.
 
 **Owner-initiated invite** — Owners can skip the request step from the Admin page:

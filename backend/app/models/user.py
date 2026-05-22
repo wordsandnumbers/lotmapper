@@ -14,8 +14,6 @@ class User(Base):
     password_hash = Column(String(255), nullable=True)
     role = Column(String(50), nullable=False, default="reviewer")  # admin, owner, reviewer
     is_active = Column(Boolean, default=False)  # requires owner approval
-    signup_token = Column(String(64), unique=True, nullable=True, index=True)
-    signup_token_expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
