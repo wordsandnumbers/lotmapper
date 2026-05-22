@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/auth'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import SetPassword from './pages/SetPassword'
 import Dashboard from './pages/Dashboard'
 import Editor from './pages/Editor'
 import Admin from './pages/Admin'
@@ -20,7 +21,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   if (!token) {
     return <Navigate to="/login" replace />
   }
-  if (user?.role !== 'admin') {
+  if (user?.role !== 'admin' && user?.role !== 'owner') {
     return <Navigate to="/dashboard" replace />
   }
   return <>{children}</>
@@ -31,6 +32,7 @@ function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/set-password" element={<SetPassword />} />
       <Route
         path="/"
         element={

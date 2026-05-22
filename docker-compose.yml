@@ -43,6 +43,9 @@ services:
       - HF_HOME=/app/.cache/huggingface
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
       - RABBITMQ_URL=amqp://parking:parking@rabbitmq:5672/
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM:-onboarding@resend.dev}
+      - APP_BASE_URL=${APP_BASE_URL:-http://localhost:5173}
     depends_on:
       db:
         condition: service_healthy

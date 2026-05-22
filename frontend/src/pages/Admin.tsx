@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { authApi } from '../services/api'
+import { useAuthStore } from '../store/auth'
 
 interface User {
   id: string
@@ -10,9 +11,18 @@ interface User {
 }
 
 export default function Admin() {
+  const currentUser = useAuthStore((s) => s.user)
+  const isOwner = currentUser?.role === 'owner'
+  const isAdmin = currentUser?.role === 'admin'
+
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
+
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteError, setInviteError] = useState('')
+  const [inviteSuccess, setInviteSuccess] = useState('')
+  const [inviting, setInviting] = useState(false)
 
   const loadUsers = async () => {
     try {
@@ -53,6 +63,24 @@ export default function Admin() {
     }
   }
 
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setInviteError('')
+    setInviteSuccess('')
+    setInviting(true)
+    try {
+      await authApi.inviteUser(inviteEmail)
+      setInviteSuccess(`Invite sent to ${inviteEmail}`)
+      setInviteEmail('')
+      loadUsers()
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } } }
+      setInviteError(error.response?.data?.detail || 'Failed to send invite')
+    } finally {
+      setInviting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -65,6 +93,48 @@ export default function Admin() {
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
         <h1 className="text-2xl font-semibold text-gray-900 mb-6">User Management</h1>
+
+        {isOwner && (
+          <div className="bg-white shadow sm:rounded-md p-4 mb-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-2">Invite by Email</h2>
+            <p className="text-sm text-gray-500 mb-3">
+              Sends a signup link directly — the recipient skips the request/approval step.
+            </p>
+            <form onSubmit={handleInvite} className="flex gap-2 items-start">
+              <input
+                type="email"
+                required
+                placeholder="email@example.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              />
+              <button
+                type="submit"
+                disabled={inviting}
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {inviting ? 'Sending…' : 'Send Invite'}
+              </button>
+            </form>
+            {inviteError && (
+              <div className="mt-3 bg-red-50 border border-red-400 text-red-700 px-3 py-2 rounded text-sm">
+                {inviteError}
+              </div>
+            )}
+            {inviteSuccess && (
+              <div className="mt-3 bg-green-50 border border-green-400 text-green-700 px-3 py-2 rounded text-sm">
+                {inviteSuccess}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isOwner && (
+          <p className="text-sm text-gray-500 mb-3">
+            Activating a pending request sends the user an email with a signup link.
+          </p>
+        )}
 
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <table className="min-w-full divide-y divide-gray-200">
@@ -97,10 +167,11 @@ export default function Admin() {
                     <select
                       value={user.role}
                       onChange={(e) => handleChangeRole(user.id, e.target.value)}
-                      disabled={updating === user.id}
-                      className="text-sm border border-gray-300 rounded px-2 py-1"
+                      disabled={updating === user.id || !isAdmin}
+                      className="text-sm border border-gray-300 rounded px-2 py-1 disabled:opacity-50"
                     >
                       <option value="reviewer">Reviewer</option>
+                      <option value="owner">Owner</option>
                       <option value="admin">Admin</option>
                     </select>
                   </td>
@@ -121,12 +192,13 @@ export default function Admin() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button
                       onClick={() => handleToggleActive(user.id, user.is_active)}
-                      disabled={updating === user.id}
+                      disabled={updating === user.id || !isOwner}
                       className={`${
                         user.is_active
                           ? 'text-red-600 hover:text-red-900'
                           : 'text-green-600 hover:text-green-900'
-                      } disabled:opacity-50`}
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      title={!isOwner ? 'Only Owners can activate users' : undefined}
                     >
                       {updating === user.id
                         ? 'Updating...'

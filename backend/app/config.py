@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -27,6 +28,11 @@ class Settings(BaseSettings):
 
     # RabbitMQ
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
+
+    # Email (Resend)
+    resend_api_key: Optional[str] = None
+    email_from: str = "no-reply@example.com"
+    app_base_url: str = "http://localhost:8080"
 
     class Config:
         env_file = ".env"

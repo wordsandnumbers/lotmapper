@@ -11,9 +11,9 @@ class User(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
-    role = Column(String(50), nullable=False, default="reviewer")  # admin, reviewer
-    is_active = Column(Boolean, default=False)  # requires admin approval
+    password_hash = Column(String(255), nullable=True)
+    role = Column(String(50), nullable=False, default="reviewer")  # admin, owner, reviewer
+    is_active = Column(Boolean, default=False)  # requires owner approval
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -9,7 +9,8 @@ A web application for detecting and editing parking lot polygons from satellite 
 - **Live Progress**: SSE-based progress streaming so the browser shows real-time inference status
 - **Interactive Map Editor**: Edit, add, delete, and split parking lot polygons on a Leaflet map
 - **City Boundary Search**: Look up official downtown/city boundaries by name (via ArcGIS Hub) to use as project bounds
-- **Multi-User Support**: Role-based access control (Admin, Reviewer)
+- **Multi-User Support**: Role-based access control (Admin, Owner, Reviewer)
+- **Email-First Signup**: Public "Request Access" flow + Owner-initiated invites, both completed via a signed signup link
 - **Project Management**: Create projects for different areas, track status through a review workflow
 
 ## Tech Stack
@@ -21,6 +22,7 @@ A web application for detecting and editing parking lot polygons from satellite 
 - **Message Queue**: RabbitMQ 3.13
 - **Maps**: Google Maps satellite tiles (proxied + cached by backend)
 - **Auth**: JWT-based authentication
+- **Email**: Resend (transactional sends for signup links + Owner notifications)
 
 ## Getting Started
 
@@ -42,10 +44,11 @@ A web application for detecting and editing parking lot polygons from satellite 
    docker compose up -d
    ```
 
-3. Create an admin user:
+3. Create the first admin user (only needed once, to bootstrap):
    ```bash
    docker compose exec backend python scripts/create_admin.py admin@example.com yourpassword
    ```
+   Subsequent users go through the email signup flow — see [Access & Signup](#access--signup).
 
 4. Access the application:
    - Frontend: http://localhost:5173
@@ -62,7 +65,14 @@ SECRET_KEY=your-secret-key
 GOOGLE_MAPS_API_KEY=your-google-maps-key
 CORS_ORIGINS=["http://localhost:5173"]
 RABBITMQ_URL=amqp://parking:parking@rabbitmq:5672/
+
+# Email — needed for the signup flow
+RESEND_API_KEY=re_your_resend_api_key   # optional in dev; emails log to stdout if unset
+EMAIL_FROM=onboarding@resend.dev        # in prod, must be an address on a verified Resend domain
+APP_BASE_URL=http://localhost:5173      # in prod, your public URL — used to build signup links
 ```
+
+In production, `EMAIL_FROM` must be on a domain you've verified at [resend.com/domains](https://resend.com/domains); `onboarding@resend.dev` only delivers to your own Resend account email. `APP_BASE_URL` is embedded in outbound emails, so it must be the public frontend URL, not `localhost`.
 
 ## Usage
 
@@ -83,8 +93,28 @@ RABBITMQ_URL=amqp://parking:parking@rabbitmq:5672/
 
 ### User Roles
 
-- **Admin**: Full access — can approve projects and manage users
-- **Reviewer**: Can create projects, run detection, and edit polygons
+- **Admin**: Manages user roles and creates users directly. Can approve projects.
+- **Owner**: Approves access requests and sends invites. Receives email notifications when someone requests access.
+- **Reviewer**: Can create projects, run detection, and edit polygons. The default role assigned to new signups.
+
+### Access & Signup
+
+There are two paths into the app, both ending at a "Set Password" page reached via a signed link:
+
+**Public "Request Access"** — anyone can submit their email at `/register`:
+
+1. Request creates a pending user row and emails all active Owners.
+2. An Owner opens the Admin page and activates the request.
+3. Activation emails the requester a single-use signup link (signed JWT, 72h TTL).
+4. The requester clicks the link, sets a password, and is logged in.
+
+**Owner-initiated invite** — Owners can skip the request step from the Admin page:
+
+1. Owner enters an email in the "Invite by Email" section.
+2. Recipient is emailed a signup link directly (no approval step).
+3. Duplicate invites / existing requests / existing accounts surface a clear 409 error.
+
+Admins keep the ability to create users directly via `POST /auth/users` (used by `scripts/create_admin.py` for bootstrapping) and to change roles. Only Owners can activate pending requests.
 
 ## Project Structure
 
@@ -98,7 +128,7 @@ parking-lot-app/
 │   │   ├── schemas/       # Pydantic schemas
 │   │   ├── services/      # Business logic (inference, city_resolver, queue, sse, tiles, osm)
 │   │   └── worker_main.py # RabbitMQ inference worker entry point
-│   ├── alembic/           # Database migrations (001–004)
+│   ├── alembic/           # Database migrations (001–008)
 │   └── scripts/           # Utility scripts
 ├── frontend/
 │   └── src/
