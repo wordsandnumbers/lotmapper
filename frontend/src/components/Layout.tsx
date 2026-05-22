@@ -24,7 +24,7 @@ export default function Layout() {
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/dashboard">
                   <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center">
-                    <span className="text-white font-bold text-lg leading-none">P</span>
+                    <span className="text-white font-bold text-sm leading-none">LM</span>
                   </div>
                 </Link>
               </div>
