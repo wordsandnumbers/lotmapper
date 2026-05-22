@@ -67,7 +67,39 @@ def test_approval_with_existing_password_does_not_send_email(
     assert mock_email["signup_links"] == []
 
 
-def test_admin_can_still_change_role(client, make_user, auth_headers, db_session):
+def test_admin_can_change_reviewer_to_admin(
+    client, make_user, auth_headers, db_session
+):
+    admin = make_user(role="admin", is_active=True)
+    target = make_user(role="reviewer", is_active=True)
+
+    r = client.patch(
+        f"/auth/users/{target.id}",
+        json={"role": "admin"},
+        headers=auth_headers(admin),
+    )
+    assert r.status_code == 200
+    db_session.refresh(target)
+    assert target.role == "admin"
+
+
+def test_owner_can_change_reviewer_to_admin(
+    client, make_user, auth_headers, db_session
+):
+    owner = make_user(role="owner", is_active=True)
+    target = make_user(role="reviewer", is_active=True)
+
+    r = client.patch(
+        f"/auth/users/{target.id}",
+        json={"role": "admin"},
+        headers=auth_headers(owner),
+    )
+    assert r.status_code == 200
+    db_session.refresh(target)
+    assert target.role == "admin"
+
+
+def test_admin_cannot_promote_to_owner(client, make_user, auth_headers, db_session):
     admin = make_user(role="admin", is_active=True)
     target = make_user(role="reviewer", is_active=True)
 
@@ -76,12 +108,26 @@ def test_admin_can_still_change_role(client, make_user, auth_headers, db_session
         json={"role": "owner"},
         headers=auth_headers(admin),
     )
-    assert r.status_code == 200
+    assert r.status_code == 403
+    db_session.refresh(target)
+    assert target.role == "reviewer"
+
+
+def test_admin_cannot_change_owner_role(client, make_user, auth_headers, db_session):
+    admin = make_user(role="admin", is_active=True)
+    target = make_user(role="owner", is_active=True)
+
+    r = client.patch(
+        f"/auth/users/{target.id}",
+        json={"role": "reviewer"},
+        headers=auth_headers(admin),
+    )
+    assert r.status_code == 403
     db_session.refresh(target)
     assert target.role == "owner"
 
 
-def test_owner_cannot_change_role(client, make_user, auth_headers):
+def test_owner_can_promote_to_owner(client, make_user, auth_headers, db_session):
     owner = make_user(role="owner", is_active=True)
     target = make_user(role="reviewer", is_active=True)
 
@@ -89,5 +135,35 @@ def test_owner_cannot_change_role(client, make_user, auth_headers):
         f"/auth/users/{target.id}",
         json={"role": "owner"},
         headers=auth_headers(owner),
+    )
+    assert r.status_code == 200
+    db_session.refresh(target)
+    assert target.role == "owner"
+
+
+def test_owner_can_change_another_owner_role(
+    client, make_user, auth_headers, db_session
+):
+    owner = make_user(role="owner", is_active=True)
+    target = make_user(role="owner", is_active=True)
+
+    r = client.patch(
+        f"/auth/users/{target.id}",
+        json={"role": "admin"},
+        headers=auth_headers(owner),
+    )
+    assert r.status_code == 200
+    db_session.refresh(target)
+    assert target.role == "admin"
+
+
+def test_reviewer_cannot_change_role(client, make_user, auth_headers):
+    reviewer = make_user(role="reviewer", is_active=True)
+    target = make_user(role="reviewer", is_active=True)
+
+    r = client.patch(
+        f"/auth/users/{target.id}",
+        json={"role": "admin"},
+        headers=auth_headers(reviewer),
     )
     assert r.status_code == 403

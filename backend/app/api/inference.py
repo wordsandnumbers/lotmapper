@@ -46,7 +46,7 @@ async def trigger_inference(
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    if project.created_by != current_user.id and current_user.role != "admin":
+    if project.created_by != current_user.id and current_user.role not in ("admin", "owner"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     if project.status == "processing":
@@ -88,7 +88,7 @@ async def stream_inference_progress(
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    if project.created_by != current_user.id and current_user.role != "admin":
+    if project.created_by != current_user.id and current_user.role not in ("admin", "owner"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     q = sse.subscribe(str(project_id))

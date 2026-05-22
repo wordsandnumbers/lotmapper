@@ -379,7 +379,7 @@ export default function Editor() {
             </>
           )}
 
-          {project.status === 'review' && user?.role === 'admin' && (
+          {project.status === 'review' && (user?.role === 'admin' || user?.role === 'owner') && (
             <button
               onClick={handleApprove}
               disabled={saving}
@@ -399,7 +399,7 @@ export default function Editor() {
             </button>
           )}
 
-          {user?.role === 'admin' && (
+          {(user?.role === 'admin' || user?.role === 'owner') && (
             <div className="border-t pt-3 mt-3">
               {showDeleteConfirm ? (
                 <div className="space-y-2">

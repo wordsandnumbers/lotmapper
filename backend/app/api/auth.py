@@ -247,11 +247,19 @@ async def update_user(
         user_update.is_active is not None and user_update.is_active != user.is_active
     )
 
-    if role_change and current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required to change role",
-        )
+    if role_change:
+        if current_user.role not in ("admin", "owner"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin or Owner access required to change role",
+            )
+        if current_user.role != "owner" and (
+            user.role == "owner" or user_update.role == "owner"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only an Owner can grant or modify the Owner role",
+            )
     if activation and current_user.role != "owner":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -283,11 +291,11 @@ async def create_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Create a new user (admin creates active users). Admin only."""
-    if current_user.role != "admin":
+    """Create a new active user. Admin or Owner only."""
+    if current_user.role not in ("admin", "owner"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail="Admin or Owner access required",
         )
 
     existing = db.query(User).filter(User.email == user_data.email).first()
