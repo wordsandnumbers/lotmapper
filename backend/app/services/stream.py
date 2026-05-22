@@ -3,7 +3,7 @@ Progress event streaming via the native RabbitMQ Stream protocol (port 5552).
 
 Uses the rstream client for best performance. Each backend replica subscribes
 independently with OffsetType.NEXT so it receives only messages published after
-it connects. Reconnection is handled automatically by BackOffRecoveryStrategy.
+it connects. subscribe_progress reconnects with exponential backoff (5s → 60s).
 
 Topology:
   - Stream: inference-progress (durable, created idempotently by both sides)
@@ -49,44 +49,56 @@ async def subscribe_progress(url: str, callback: Callable) -> None:
     """
     Long-running coroutine that consumes all progress events and calls callback.
     Starts from OffsetType.NEXT so only messages arriving after startup are
-    delivered. BackOffRecoveryStrategy (default) handles reconnection.
+    delivered. Reconnects with exponential backoff if RabbitMQ is unavailable.
     """
     consumer_tag = f"backend-{uuid.uuid4().hex[:8]}"
     host, username, password = _parse_amqp_url(url)
+    delay = 5
 
-    consumer = Consumer(
-        host=host,
-        port=STREAM_PORT,
-        username=username,
-        password=password,
-        connection_name=consumer_tag,
-    )
+    while True:
+        consumer = None
+        try:
+            consumer = Consumer(
+                host=host,
+                port=STREAM_PORT,
+                username=username,
+                password=password,
+                connection_name=consumer_tag,
+            )
+            await consumer.start()
+            await consumer.create_stream(PROGRESS_STREAM, exists_ok=True)
 
-    try:
-        await consumer.start()
-        await consumer.create_stream(PROGRESS_STREAM, exists_ok=True)
+            async def on_message(data: bytes, _: MessageContext) -> None:
+                try:
+                    event = json.loads(data)
+                    project_id = event.get("project_id")
+                    if project_id:
+                        await callback(project_id, event)
+                except Exception as e:
+                    logger.warning(f"[Stream] Failed to handle message: {e}")
 
-        async def on_message(data: bytes, _: MessageContext) -> None:
-            try:
-                event = json.loads(data)
-                project_id = event.get("project_id")
-                if project_id:
-                    await callback(project_id, event)
-            except Exception as e:
-                logger.warning(f"[Stream] Failed to handle message: {e}")
+            await consumer.subscribe(
+                stream=PROGRESS_STREAM,
+                callback=on_message,
+                offset_specification=ConsumerOffsetSpecification(OffsetType.NEXT, None),
+                subscriber_name=consumer_tag,
+                decoder=lambda data: data,
+            )
 
-        await consumer.subscribe(
-            stream=PROGRESS_STREAM,
-            callback=on_message,
-            offset_specification=ConsumerOffsetSpecification(OffsetType.NEXT, None),
-            subscriber_name=consumer_tag,
-            decoder=lambda data: data,
-        )
+            logger.info(f"[Stream] Subscribed to {PROGRESS_STREAM} as {consumer_tag}")
+            delay = 5
+            await consumer.run()
+            logger.warning("[Stream] Consumer disconnected, reconnecting...")
 
-        logger.info(f"[Stream] Subscribed to {PROGRESS_STREAM} as {consumer_tag}")
-        await consumer.run()
-
-    except asyncio.CancelledError:
-        pass
-    finally:
-        await consumer.close()
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            logger.warning(f"[Stream] Connection failed: {e}. Retrying in {delay}s...")
+            delay = min(delay * 2, 60)
+            await asyncio.sleep(delay)
+        finally:
+            if consumer is not None:
+                try:
+                    await consumer.close()
+                except Exception:
+                    pass

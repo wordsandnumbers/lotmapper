@@ -1,0 +1,43 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Short git SHA to roll back to (e.g. abc1234)"
+        required: true
+
+jobs:
+  rollback:
+    name: Roll Back to git-${{ inputs.sha }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Roll back
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          envs: INPUT_SHA
+          script: |
+            set -e
+            cd /opt/parking-lot-app
+
+            TARGET_TAG="git-${{ inputs.sha }}"
+
+            # Update pinned version
+            if grep -q "^IMAGE_TAG=" .env; then
+              sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${TARGET_TAG}/" .env
+            else
+              echo "IMAGE_TAG=${TARGET_TAG}" >> .env
+            fi
+
+            # Log in to GHCR
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull target images and restart (no migration on rollback)
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend worker frontend
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend worker frontend
+
+            echo "Rolled back to ${TARGET_TAG}"

@@ -22,6 +22,7 @@ async def main():
     settings = get_settings()
     stream_host, stream_user, stream_pass = _parse_amqp_url(settings.rabbitmq_url)
 
+    logger.info(f"[Worker] Starting {settings.app_version}")
     logger.info("[Worker] Connecting to RabbitMQ...")
     amqp_connection = await aio_pika.connect_robust(settings.rabbitmq_url)
     channel = await amqp_connection.channel()

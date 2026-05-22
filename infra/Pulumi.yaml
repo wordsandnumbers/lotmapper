@@ -1,0 +1,3 @@
+name: parking-lot-infra
+runtime: nodejs
+description: Parking Lot App — AWS ECS on EC2 infrastructure
