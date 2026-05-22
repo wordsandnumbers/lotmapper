@@ -32,7 +32,7 @@ export default function Layout() {
                 <NavLink to="/dashboard" className={navLinkClass}>
                   Dashboard
                 </NavLink>
-                {user?.role === 'admin' && (
+                {(user?.role === 'admin' || user?.role === 'owner') && (
                   <NavLink to="/admin" className={navLinkClass}>
                     Admin
                   </NavLink>

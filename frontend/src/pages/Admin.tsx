@@ -167,11 +167,21 @@ export default function Admin() {
                     <select
                       value={user.role}
                       onChange={(e) => handleChangeRole(user.id, e.target.value)}
-                      disabled={updating === user.id || !isAdmin}
+                      disabled={
+                        updating === user.id ||
+                        !(isOwner || (isAdmin && user.role !== 'owner'))
+                      }
                       className="text-sm border border-gray-300 rounded px-2 py-1 disabled:opacity-50"
+                      title={
+                        isAdmin && user.role === 'owner'
+                          ? 'Only Owners can modify an Owner'
+                          : undefined
+                      }
                     >
                       <option value="reviewer">Reviewer</option>
-                      <option value="owner">Owner</option>
+                      {(isOwner || user.role === 'owner') && (
+                        <option value="owner">Owner</option>
+                      )}
                       <option value="admin">Admin</option>
                     </select>
                   </td>

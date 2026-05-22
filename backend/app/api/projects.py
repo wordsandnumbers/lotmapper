@@ -142,11 +142,13 @@ async def update_project(
     if project_update.description is not None:
         project.description = project_update.description
     if project_update.status is not None:
-        # Only admins can approve
-        if project_update.status == "approved" and current_user.role != "admin":
+        if project_update.status == "approved" and current_user.role not in (
+            "admin",
+            "owner",
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only admins can approve projects",
+                detail="Only admins or owners can approve projects",
             )
         project.status = project_update.status
         if project_update.status == "approved":
@@ -163,11 +165,11 @@ async def delete_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Delete a project. Admin only."""
-    if current_user.role != "admin":
+    """Delete a project. Admin or Owner only."""
+    if current_user.role not in ("admin", "owner"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail="Admin or Owner access required",
         )
 
     project = db.query(Project).filter(Project.id == project_id).first()
