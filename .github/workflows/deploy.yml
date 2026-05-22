@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [feature/digitalocean-deploy]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -82,7 +82,9 @@ jobs:
             set -e
             cd /opt/lotmapper
 
-            git pull --ff-only origin feature/digitalocean-deploy
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
 
             # Pin the deployed version in .env
             if grep -q "^IMAGE_TAG=" .env; then
