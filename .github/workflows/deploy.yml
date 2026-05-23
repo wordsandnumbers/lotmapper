@@ -99,3 +99,7 @@ jobs:
 
             # Run migrations
             docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T backend alembic upgrade head
+
+            # Reclaim space from prior image versions now that new ones are live
+            docker image prune -af
+            docker builder prune -af
