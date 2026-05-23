@@ -34,10 +34,10 @@ numpy==1.26.4
 opencv-python-headless==4.9.0.80
 
 # Model inference (from existing project)
-torch>=2.0.0
-torchvision>=0.15.0
-transformers>=4.36.0
-pytorch-lightning>=2.0.0
+torch>=2.0.0,<3.0
+torchvision>=0.15.0,<1.0
+transformers>=4.36.0,<5.0
+pytorch-lightning>=2.0.0,<3.0
 evaluate>=0.4.0
 huggingface-hub>=0.20.0
 
