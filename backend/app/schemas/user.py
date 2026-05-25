@@ -49,3 +49,12 @@ class AccessRequest(BaseModel):
 class SetPasswordRequest(BaseModel):
     token: str
     password: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    password: str

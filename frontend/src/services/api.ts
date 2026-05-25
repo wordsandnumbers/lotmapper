@@ -40,6 +40,14 @@ export const authApi = {
     const response = await api.post('/auth/set-password', { token, password })
     return response.data
   },
+  requestPasswordReset: async (email: string) => {
+    const response = await api.post('/auth/request-password-reset', { email })
+    return response.data
+  },
+  resetPassword: async (token: string, password: string) => {
+    const response = await api.post('/auth/reset-password', { token, password })
+    return response.data
+  },
   inviteUser: async (email: string) => {
     const response = await api.post('/auth/invite', { email })
     return response.data
