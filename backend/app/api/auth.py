@@ -9,6 +9,8 @@ from app.models.user import User
 from app.schemas.user import (
     AccessRequest,
     LoginRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     SetPasswordRequest,
     Token,
     UserCreate,
@@ -16,8 +18,11 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.core.security import (
+    _hash_fingerprint,
     create_access_token,
+    create_reset_token,
     create_signup_token,
+    decode_reset_token,
     decode_signup_token,
     get_password_hash,
     verify_password,
@@ -33,6 +38,10 @@ settings = get_settings()
 
 def _signup_link(token: str) -> str:
     return f"{settings.app_base_url.rstrip('/')}/set-password?token={token}"
+
+
+def _reset_link(token: str) -> str:
+    return f"{settings.app_base_url.rstrip('/')}/reset-password?token={token}"
 
 
 def _send_signup_link(
@@ -127,6 +136,74 @@ async def set_password(payload: SetPasswordRequest, db: Session = Depends(get_db
         data={"sub": str(user.id), "email": user.email, "role": user.role}
     )
     return Token(access_token=access_token)
+
+
+@router.post("/request-password-reset", response_model=dict)
+@limiter.limit("10/hour")
+async def request_password_reset(
+    request: Request,
+    payload: PasswordResetRequest,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Public endpoint: send a password reset link to the given email.
+
+    Always returns the same response shape regardless of whether the email
+    matches an account — prevents account enumeration. Silently drops requests
+    that exceed the per-email rate limit for the same reason.
+    """
+    allowed = email_limiter.hit(
+        f"reset-password:{payload.email}", limit=5, window=timedelta(hours=1)
+    )
+    if allowed:
+        user = db.query(User).filter(User.email == payload.email).first()
+        if user and user.is_active and user.password_hash is not None:
+            token = create_reset_token(user.id, user.password_hash)
+            link = _reset_link(token)
+            background.add_task(
+                email_service.send_password_reset_email,
+                user.email,
+                link,
+            )
+
+    return {
+        "message": "If an account exists for that email, a reset link has been sent."
+    }
+
+
+@router.post("/reset-password", response_model=dict)
+async def reset_password(payload: PasswordResetConfirm, db: Session = Depends(get_db)):
+    """Consume a reset token to set a new password."""
+    if len(payload.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters",
+        )
+
+    decoded = decode_reset_token(payload.token)
+    if not decoded:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This link is invalid or expired",
+        )
+    user_id, fingerprint = decoded
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if (
+        not user
+        or not user.is_active
+        or user.password_hash is None
+        or _hash_fingerprint(user.password_hash) != fingerprint
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This link is invalid or expired",
+        )
+
+    user.password_hash = get_password_hash(payload.password)
+    db.commit()
+
+    return {"message": "Password updated. Please log in."}
 
 
 @router.post("/invite", response_model=UserResponse)

@@ -106,11 +106,12 @@ def client(db_session):
 def mock_email(monkeypatch):
     """Capture outbound emails instead of sending them.
 
-    Returns a dict with two lists:
-        notifications: [(requester_email, owner_emails), ...]
-        signup_links:  [{recipient, link, invited_by}, ...]
+    Returns a dict with these lists:
+        notifications:    [(requester_email, owner_emails), ...]
+        signup_links:     [{recipient, link, invited_by}, ...]
+        password_resets:  [{recipient, link}, ...]
     """
-    captured = {"notifications": [], "signup_links": []}
+    captured = {"notifications": [], "signup_links": [], "password_resets": []}
 
     def fake_notify(requester_email: str, owner_emails: list[str]) -> None:
         captured["notifications"].append((requester_email, list(owner_emails)))
@@ -120,6 +121,11 @@ def mock_email(monkeypatch):
             {"recipient": recipient_email, "link": signup_link, "invited_by": invited_by}
         )
 
+    def fake_password_reset(recipient_email, reset_link):
+        captured["password_resets"].append(
+            {"recipient": recipient_email, "link": reset_link}
+        )
+
     from app.api import auth as auth_module
     from app.services import email as email_module
 
@@ -127,11 +133,15 @@ def mock_email(monkeypatch):
         email_module, "send_access_request_notification", fake_notify
     )
     monkeypatch.setattr(email_module, "send_signup_link_email", fake_signup_link)
+    monkeypatch.setattr(email_module, "send_password_reset_email", fake_password_reset)
     monkeypatch.setattr(
         auth_module.email_service, "send_access_request_notification", fake_notify
     )
     monkeypatch.setattr(
         auth_module.email_service, "send_signup_link_email", fake_signup_link
+    )
+    monkeypatch.setattr(
+        auth_module.email_service, "send_password_reset_email", fake_password_reset
     )
     return captured
 

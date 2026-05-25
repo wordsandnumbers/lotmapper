@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { authApi } from '../services/api'
 import { useAuthStore } from '../store/auth'
 
@@ -9,7 +9,9 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
   const { setAuth } = useAuthStore()
+  const flash = (location.state as { flash?: string } | null)?.flash
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,6 +47,11 @@ export default function Login() {
         <div className="bg-white rounded-xl shadow-lg ring-1 ring-gray-200 p-8">
           <h2 className="text-xl font-semibold text-gray-900">Sign in</h2>
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+            {flash && !error && (
+              <div className="bg-green-50 border border-green-400 text-green-800 px-4 py-3 rounded">
+                {flash}
+              </div>
+            )}
             {error && (
               <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded">
                 {error}
@@ -90,6 +97,12 @@ export default function Login() {
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
+
+            <div className="text-center text-sm">
+              <Link to="/forgot-password" className="text-blue-600 hover:text-blue-500">
+                Forgot password?
+              </Link>
+            </div>
 
             <div className="text-center text-sm">
               <Link to="/register" className="text-blue-600 hover:text-blue-500">
