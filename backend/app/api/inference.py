@@ -14,7 +14,7 @@ from app.models.user import User
 from app.models.project import Project
 from app.models.polygon import Polygon
 from app.models.inference_job import InferenceJob
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, user_can_access_project
 from app.core.security import decode_token
 from app.services import sse, queue
 
@@ -43,11 +43,8 @@ async def trigger_inference(
 ):
     """Queue model inference for a project."""
     project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
+    if not project or not user_can_access_project(current_user, project):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-
-    if project.created_by != current_user.id and current_user.role not in ("admin", "owner"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     if project.status == "processing":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Project is already being processed")
@@ -85,11 +82,8 @@ async def stream_inference_progress(
     current_user = _get_user_from_token(token, db)
 
     project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
+    if not project or not user_can_access_project(current_user, project):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-
-    if project.created_by != current_user.id and current_user.role not in ("admin", "owner"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
     q = sse.subscribe(str(project_id))
 
@@ -121,7 +115,7 @@ async def get_inference_status(
 ):
     """Get the inference status for a project."""
     project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
+    if not project or not user_can_access_project(current_user, project):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
     polygon_count = db.query(Polygon).filter(

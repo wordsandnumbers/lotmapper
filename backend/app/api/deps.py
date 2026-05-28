@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
+from app.models.project import Project
 from app.core.security import decode_token
 
 security = HTTPBearer()
@@ -48,3 +49,9 @@ async def get_current_active_user(
             detail="Account not activated",
         )
     return current_user
+
+
+def user_can_access_project(user: User, project: Project) -> bool:
+    if user.role in ("admin", "owner"):
+        return True
+    return project.created_by == user.id

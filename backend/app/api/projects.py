@@ -17,7 +17,7 @@ from app.schemas.project import (
     ProjectUpdate,
     ProjectListResponse,
 )
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, user_can_access_project
 
 router = APIRouter()
 
@@ -94,6 +94,9 @@ async def list_projects(
     """List all projects with optional status filter."""
     query = db.query(Project)
 
+    if current_user.role not in ("admin", "owner"):
+        query = query.filter(Project.created_by == current_user.id)
+
     if status:
         query = query.filter(Project.status == status)
 
@@ -119,6 +122,11 @@ async def get_project(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
         )
+    if not user_can_access_project(current_user, project):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
     return project_to_response(project, db)
 
 
@@ -132,6 +140,11 @@ async def update_project(
     """Update a project."""
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+    if not user_can_access_project(current_user, project):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
@@ -174,6 +187,11 @@ async def delete_project(
 
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+    if not user_can_access_project(current_user, project):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
