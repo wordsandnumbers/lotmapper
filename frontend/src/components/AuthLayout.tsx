@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 
 type AuthLayoutProps = {
   title: string
@@ -7,6 +7,11 @@ type AuthLayoutProps = {
 }
 
 export default function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
+  useEffect(() => {
+    document.body.classList.add('auth-route')
+    return () => document.body.classList.remove('auth-route')
+  }, [])
+
   return (
     <div className="min-h-screen overflow-hidden bg-auth-canvas text-auth-logo">
       <div className="relative flex min-h-screen items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
