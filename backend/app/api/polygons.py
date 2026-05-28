@@ -20,7 +20,7 @@ from app.schemas.polygon import (
     GeoJSONFeature,
     GeoJSONFeatureCollection,
 )
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_user, user_can_access_project
 
 router = APIRouter()
 
@@ -72,6 +72,11 @@ async def get_project_polygons(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
         )
+    if not user_can_access_project(current_user, project):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
 
     query = db.query(Polygon).filter(Polygon.project_id == project_id)
     if not include_deleted:
@@ -109,6 +114,11 @@ async def create_polygon(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
         )
+    if not user_can_access_project(current_user, project):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
 
     geom_wkt = geojson_to_wkt(polygon_data.geometry.model_dump())
 
@@ -142,6 +152,12 @@ async def get_polygon(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Polygon not found",
         )
+    project = db.query(Project).filter(Project.id == polygon.project_id).first()
+    if not project or not user_can_access_project(current_user, project):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Polygon not found",
+        )
     return polygon_to_response(polygon, db)
 
 
@@ -155,6 +171,12 @@ async def update_polygon(
     """Update a polygon (geometry, properties, or status)."""
     polygon = db.query(Polygon).filter(Polygon.id == polygon_id).first()
     if not polygon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Polygon not found",
+        )
+    project = db.query(Project).filter(Project.id == polygon.project_id).first()
+    if not project or not user_can_access_project(current_user, project):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Polygon not found",
@@ -193,6 +215,12 @@ async def delete_polygon(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Polygon not found",
         )
+    project = db.query(Project).filter(Project.id == polygon.project_id).first()
+    if not project or not user_can_access_project(current_user, project):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Polygon not found",
+        )
 
     polygon.status = "deleted"
     polygon.edited_by = current_user.id
@@ -212,6 +240,12 @@ async def split_polygon(
     """Split a polygon into two using a line."""
     polygon = db.query(Polygon).filter(Polygon.id == polygon_id).first()
     if not polygon:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Polygon not found",
+        )
+    project = db.query(Project).filter(Project.id == polygon.project_id).first()
+    if not project or not user_can_access_project(current_user, project):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Polygon not found",
