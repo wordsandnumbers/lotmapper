@@ -60,7 +60,7 @@ export default function Login() {
             type="email"
             autoComplete="email"
             required
-            className="block w-full rounded-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:border-auth-primary focus:outline-none focus:ring-2 focus:ring-auth-primary/25 sm:text-sm"
+            className="block w-full rounded-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/25 sm:text-sm"
             placeholder="Email address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -76,7 +76,7 @@ export default function Login() {
             type="password"
             autoComplete="current-password"
             required
-            className="block w-full rounded-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:border-auth-primary focus:outline-none focus:ring-2 focus:ring-auth-primary/25 sm:text-sm"
+            className="block w-full rounded-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/25 sm:text-sm"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -86,19 +86,19 @@ export default function Login() {
         <button
           type="submit"
           disabled={loading}
-          className="flex w-full justify-center rounded-md border border-transparent bg-auth-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-auth-primaryHover focus:outline-none focus:ring-2 focus:ring-auth-accent focus:ring-offset-2 disabled:opacity-50"
+          className="flex w-full justify-center rounded-md border border-transparent bg-brand-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-primaryHover focus:outline-none focus:ring-2 focus:ring-brand-accent focus:ring-offset-2 disabled:opacity-50"
         >
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
 
         <div className="text-center text-sm">
-          <Link to="/forgot-password" className="font-medium text-auth-primary hover:text-auth-primaryHover">
+          <Link to="/forgot-password" className="font-medium text-brand-primary hover:text-brand-primaryHover">
             Forgot password?
           </Link>
         </div>
 
         <div className="text-center text-sm">
-          <Link to="/register" className="font-medium text-auth-primary hover:text-auth-primaryHover">
+          <Link to="/register" className="font-medium text-brand-primary hover:text-brand-primaryHover">
             Don't have an account? Request access
           </Link>
         </div>

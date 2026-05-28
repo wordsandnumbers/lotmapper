@@ -290,7 +290,7 @@ export default function Editor() {
       <div className="w-full sm:w-80 sm:flex-shrink-0 bg-white/95 shadow-lg ring-1 ring-black/10 p-4 overflow-y-auto max-h-[45vh] sm:max-h-none">
         <button
           onClick={() => navigate('/dashboard')}
-          className="text-auth-primary hover:text-auth-primaryHover mb-4 flex items-center"
+          className="text-brand-primary hover:text-brand-primaryHover mb-4 flex items-center"
         >
           &larr; Back to Dashboard
         </button>
@@ -304,7 +304,7 @@ export default function Editor() {
               project.status === 'approved'
                 ? 'bg-green-100 text-green-800'
                 : project.status === 'review'
-                ? 'bg-auth-primary/10 text-auth-primary'
+                ? 'bg-brand-primary/10 text-brand-primary'
                 : project.status === 'processing'
                 ? 'bg-yellow-100 text-yellow-800'
                 : 'bg-gray-100 text-gray-800'
@@ -320,7 +320,7 @@ export default function Editor() {
             <button
               onClick={handleRunInference}
               disabled={running}
-              className="w-full bg-auth-primary hover:bg-auth-primaryHover text-white px-4 py-2 rounded-md disabled:opacity-50"
+              className="w-full bg-brand-primary hover:bg-brand-primaryHover text-white px-4 py-2 rounded-md disabled:opacity-50"
             >
               {running ? 'Starting...' : 'Run Detection'}
             </button>
@@ -329,12 +329,12 @@ export default function Editor() {
           {project.status === 'processing' && (
             <div className="py-4">
               <div className="flex items-center mb-2">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-auth-primary mr-2 flex-shrink-0"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-brand-primary mr-2 flex-shrink-0"></div>
                 <p className="text-sm text-app-heading font-medium">Processing...</p>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
                 <div
-                  className="bg-auth-primary h-2 rounded-full transition-all duration-500"
+                  className="bg-brand-primary h-2 rounded-full transition-all duration-500"
                   style={{ width: `${inferenceProgress}%` }}
                 />
               </div>
@@ -393,7 +393,7 @@ export default function Editor() {
             <button
               onClick={handleSubmitForReview}
               disabled={saving}
-              className="w-full bg-auth-primary hover:bg-auth-primaryHover text-white px-4 py-2 rounded-md disabled:opacity-50"
+              className="w-full bg-brand-primary hover:bg-brand-primaryHover text-white px-4 py-2 rounded-md disabled:opacity-50"
             >
               Submit for Review
             </button>
@@ -439,7 +439,7 @@ export default function Editor() {
         </div>
 
         {saving && (
-          <div className="mt-4 text-sm text-auth-primary">Saving changes...</div>
+          <div className="mt-4 text-sm text-brand-primary">Saving changes...</div>
         )}
       </div>
 

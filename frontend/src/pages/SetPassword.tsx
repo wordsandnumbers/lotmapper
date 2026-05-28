@@ -23,7 +23,7 @@ export default function SetPassword() {
             <h2 className="font-bold">Invalid link</h2>
             <p className="mt-2">This link is invalid or expired.</p>
           </div>
-          <Link to="/login" className="font-medium text-auth-primary hover:text-auth-primaryHover">
+          <Link to="/login" className="font-medium text-brand-primary hover:text-brand-primaryHover">
             Back to sign in
           </Link>
         </div>
@@ -78,7 +78,7 @@ export default function SetPassword() {
               type="password"
               autoComplete="new-password"
               required
-              className="relative block w-full rounded-none rounded-t-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:z-10 focus:border-auth-primary focus:outline-none focus:ring-2 focus:ring-auth-primary/25 sm:text-sm"
+              className="relative block w-full rounded-none rounded-t-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:z-10 focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/25 sm:text-sm"
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -94,7 +94,7 @@ export default function SetPassword() {
               type="password"
               autoComplete="new-password"
               required
-              className="relative block w-full rounded-none rounded-b-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:z-10 focus:border-auth-primary focus:outline-none focus:ring-2 focus:ring-auth-primary/25 sm:text-sm"
+              className="relative block w-full rounded-none rounded-b-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:z-10 focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/25 sm:text-sm"
               placeholder="Confirm password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -106,7 +106,7 @@ export default function SetPassword() {
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full justify-center rounded-md border border-transparent bg-auth-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-auth-primaryHover focus:outline-none focus:ring-2 focus:ring-auth-accent focus:ring-offset-2 disabled:opacity-50"
+            className="flex w-full justify-center rounded-md border border-transparent bg-brand-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-primaryHover focus:outline-none focus:ring-2 focus:ring-brand-accent focus:ring-offset-2 disabled:opacity-50"
           >
             {loading ? 'Creating account…' : 'Create account'}
           </button>

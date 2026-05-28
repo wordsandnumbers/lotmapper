@@ -3,8 +3,8 @@ import { useAuthStore } from '../store/auth'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   isActive
-    ? 'border-auth-accent text-app-heading inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
-    : 'border-transparent text-app-body hover:border-auth-primary hover:text-app-heading inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
+    ? 'border-brand-accent text-app-heading inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
+    : 'border-transparent text-app-body hover:border-brand-primary hover:text-app-heading inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium'
 
 export default function Layout() {
   const { user, logout } = useAuthStore()
@@ -23,7 +23,7 @@ export default function Layout() {
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/dashboard">
-                  <div className="w-8 h-8 bg-auth-primary rounded-md flex items-center justify-center ring-1 ring-auth-accent/30">
+                  <div className="w-8 h-8 bg-brand-primary rounded-md flex items-center justify-center ring-1 ring-brand-accent/30">
                     <span className="text-white font-bold text-sm leading-none">LM</span>
                   </div>
                 </Link>
@@ -45,7 +45,7 @@ export default function Layout() {
               </span>
               <button
                 onClick={handleLogout}
-                className="bg-auth-primary/10 hover:bg-auth-primary/15 text-auth-primary px-3 py-2 rounded-md text-sm font-medium"
+                className="bg-brand-primary/10 hover:bg-brand-primary/15 text-brand-primary px-3 py-2 rounded-md text-sm font-medium"
               >
                 Logout
               </button>

@@ -54,7 +54,7 @@ export default function Dashboard() {
       case 'processing':
         return 'bg-yellow-100 text-yellow-800'
       case 'review':
-        return 'bg-auth-primary/10 text-auth-primary'
+        return 'bg-brand-primary/10 text-brand-primary'
       case 'approved':
         return 'bg-green-100 text-green-800'
       default:
@@ -72,7 +72,7 @@ export default function Dashboard() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="bg-auth-primary hover:bg-auth-primaryHover text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm"
+            className="bg-brand-primary hover:bg-brand-primaryHover text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm"
           >
             New Project
           </button>
@@ -82,7 +82,7 @@ export default function Dashboard() {
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-            className="border border-black/10 bg-white rounded-md px-3 py-2 text-sm shadow-sm focus:border-auth-primary focus:outline-none focus:ring-2 focus:ring-auth-primary/25"
+            className="border border-black/10 bg-white rounded-md px-3 py-2 text-sm shadow-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/25"
           >
             <option value="">All Statuses</option>
             <option value="pending">Pending</option>
@@ -104,14 +104,14 @@ export default function Dashboard() {
               <ul className="divide-y divide-gray-200">
                 {projects.map((project) => (
                   <li key={project.id}>
-                    <div className="flex items-center hover:bg-auth-primary/5">
+                    <div className="flex items-center hover:bg-brand-primary/5">
                       <button
                         onClick={() => navigate(`/project/${project.id}`)}
                         className="flex-1 text-left"
                       >
                         <div className="px-4 py-4 sm:px-6">
                           <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-auth-primary truncate">
+                            <p className="text-sm font-medium text-brand-primary truncate">
                               {project.name}
                             </p>
                             <div className="ml-2 flex-shrink-0 flex">
@@ -154,7 +154,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setPage((p) => p - 1)}
                   disabled={page === 1}
-                  className="px-3 py-1 text-sm border border-black/10 bg-white rounded-md disabled:opacity-40 hover:bg-auth-primary/5"
+                  className="px-3 py-1 text-sm border border-black/10 bg-white rounded-md disabled:opacity-40 hover:bg-brand-primary/5"
                 >
                   Previous
                 </button>
@@ -164,7 +164,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setPage((p) => p + 1)}
                   disabled={page === totalPages}
-                  className="px-3 py-1 text-sm border border-black/10 bg-white rounded-md disabled:opacity-40 hover:bg-auth-primary/5"
+                  className="px-3 py-1 text-sm border border-black/10 bg-white rounded-md disabled:opacity-40 hover:bg-brand-primary/5"
                 >
                   Next
                 </button>

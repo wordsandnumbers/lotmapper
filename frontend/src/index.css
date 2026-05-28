@@ -6,9 +6,9 @@
   :root {
     --auth-canvas: 235 239 233;
     --auth-panel: 255 255 255;
-    --auth-primary: 49 95 74;
-    --auth-primary-hover: 39 77 61;
-    --auth-accent: 184 141 40;
+    --brand-primary: 49 95 74;
+    --brand-primary-hover: 39 77 61;
+    --brand-accent: 184 141 40;
     --auth-logo: 17 25 23;
     --auth-tagline: 58 73 68;
     --auth-heading: 17 24 39;
@@ -23,9 +23,9 @@
     :root {
       --auth-canvas: 17 25 23;
       --auth-panel: 255 255 255;
-      --auth-primary: 49 95 74;
-      --auth-primary-hover: 39 77 61;
-      --auth-accent: 208 168 64;
+      --brand-primary: 49 95 74;
+      --brand-primary-hover: 39 77 61;
+      --brand-accent: 208 168 64;
       --auth-logo: 255 255 255;
       --auth-tagline: 220 231 223;
       --auth-heading: 3 7 18;

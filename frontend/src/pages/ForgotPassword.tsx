@@ -34,7 +34,7 @@ export default function ForgotPassword() {
             The link expires in 1 hour.
           </div>
           <div className="text-center text-sm">
-            <Link to="/login" className="font-medium text-auth-primary hover:text-auth-primaryHover">
+            <Link to="/login" className="font-medium text-brand-primary hover:text-brand-primaryHover">
               Back to sign in
             </Link>
           </div>
@@ -59,7 +59,7 @@ export default function ForgotPassword() {
               type="email"
               autoComplete="email"
               required
-              className="block w-full rounded-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:border-auth-primary focus:outline-none focus:ring-2 focus:ring-auth-primary/25 sm:text-sm"
+              className="block w-full rounded-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/25 sm:text-sm"
               placeholder="Email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -69,13 +69,13 @@ export default function ForgotPassword() {
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full justify-center rounded-md border border-transparent bg-auth-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-auth-primaryHover focus:outline-none focus:ring-2 focus:ring-auth-accent focus:ring-offset-2 disabled:opacity-50"
+            className="flex w-full justify-center rounded-md border border-transparent bg-brand-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-primaryHover focus:outline-none focus:ring-2 focus:ring-brand-accent focus:ring-offset-2 disabled:opacity-50"
           >
             {loading ? 'Sending…' : 'Send reset link'}
           </button>
 
           <div className="text-center text-sm">
-            <Link to="/login" className="font-medium text-auth-primary hover:text-auth-primaryHover">
+            <Link to="/login" className="font-medium text-brand-primary hover:text-brand-primaryHover">
               Back to sign in
             </Link>
           </div>

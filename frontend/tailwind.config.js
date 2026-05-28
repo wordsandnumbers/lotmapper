@@ -11,13 +11,15 @@ export default {
         auth: {
           canvas: 'rgb(var(--auth-canvas) / <alpha-value>)',
           panel: 'rgb(var(--auth-panel) / <alpha-value>)',
-          primary: 'rgb(var(--auth-primary) / <alpha-value>)',
-          primaryHover: 'rgb(var(--auth-primary-hover) / <alpha-value>)',
-          accent: 'rgb(var(--auth-accent) / <alpha-value>)',
           logo: 'rgb(var(--auth-logo) / <alpha-value>)',
           tagline: 'rgb(var(--auth-tagline) / <alpha-value>)',
           heading: 'rgb(var(--auth-heading) / <alpha-value>)',
           body: 'rgb(var(--auth-body) / <alpha-value>)',
+        },
+        brand: {
+          primary: 'rgb(var(--brand-primary) / <alpha-value>)',
+          primaryHover: 'rgb(var(--brand-primary-hover) / <alpha-value>)',
+          accent: 'rgb(var(--brand-accent) / <alpha-value>)',
         },
         app: {
           canvas: 'rgb(var(--app-canvas) / <alpha-value>)',

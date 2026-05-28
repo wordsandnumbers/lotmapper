@@ -110,12 +110,12 @@ export default function Admin() {
                 placeholder="email@example.com"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-auth-primary/25 focus:border-auth-primary"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/25 focus:border-brand-primary"
               />
               <button
                 type="submit"
                 disabled={inviting}
-                className="px-4 py-2 bg-auth-primary text-white text-sm font-medium rounded-md hover:bg-auth-primaryHover disabled:opacity-50"
+                className="px-4 py-2 bg-brand-primary text-white text-sm font-medium rounded-md hover:bg-brand-primaryHover disabled:opacity-50"
               >
                 {inviting ? 'Sending…' : 'Send Invite'}
               </button>
@@ -141,7 +141,7 @@ export default function Admin() {
 
         <div className="bg-white/95 shadow-sm ring-1 ring-black/10 overflow-hidden sm:rounded-md">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-auth-primary/5">
+            <thead className="bg-brand-primary/5">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-app-body uppercase tracking-wider">
                   Email
@@ -174,7 +174,7 @@ export default function Admin() {
                         updating === user.id ||
                         !(isOwner || (isAdmin && user.role !== 'owner'))
                       }
-                      className="text-sm border border-gray-300 rounded px-2 py-1 disabled:opacity-50 focus:border-auth-primary focus:outline-none focus:ring-2 focus:ring-auth-primary/25"
+                      className="text-sm border border-gray-300 rounded px-2 py-1 disabled:opacity-50 focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/25"
                       title={
                         isAdmin && user.role === 'owner'
                           ? 'Only Owners can modify an Owner'

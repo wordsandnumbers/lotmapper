@@ -120,7 +120,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-auth-primary/25 focus:border-auth-primary"
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary/25 focus:border-brand-primary"
                 placeholder="Downtown Area 1"
               />
             </div>
@@ -133,7 +133,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-auth-primary/25 focus:border-auth-primary"
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary/25 focus:border-brand-primary"
                 placeholder="Parking lots in the downtown business district"
               />
             </div>
@@ -145,7 +145,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                   onClick={() => handleTabChange('city')}
                   className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
                     activeTab === 'city'
-                      ? 'border-auth-accent text-auth-primary'
+                      ? 'border-brand-accent text-brand-primary'
                       : 'border-transparent text-gray-500 hover:text-app-heading'
                   }`}
                 >
@@ -156,7 +156,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                   onClick={() => handleTabChange('draw')}
                   className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
                     activeTab === 'draw'
-                      ? 'border-auth-accent text-auth-primary'
+                      ? 'border-brand-accent text-brand-primary'
                       : 'border-transparent text-gray-500 hover:text-app-heading'
                   }`}
                 >
@@ -177,14 +177,14 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-app-heading hover:bg-auth-primary/5"
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-app-heading hover:bg-brand-primary/5"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitDisabled}
-              className="px-4 py-2 bg-auth-primary hover:bg-auth-primaryHover text-white rounded-md text-sm font-medium disabled:opacity-50"
+              className="px-4 py-2 bg-brand-primary hover:bg-brand-primaryHover text-white rounded-md text-sm font-medium disabled:opacity-50"
             >
               {loading ? 'Creating...' : 'Create Project'}
             </button>

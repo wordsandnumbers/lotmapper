@@ -22,7 +22,7 @@ export default function AuthLayout({ title, subtitle, children }: AuthLayoutProp
             <p className="mt-4 text-base font-medium text-auth-tagline sm:text-lg">
               Geospatial parking lot detection pipeline
             </p>
-            <div className="mx-auto mt-8 h-px w-40 bg-auth-accent lg:mx-0" />
+            <div className="mx-auto mt-8 h-px w-40 bg-brand-accent lg:mx-0" />
           </div>
 
           <section className="rounded-lg border border-black/10 bg-auth-panel/95 p-7 text-auth-heading shadow-2xl shadow-black/20 backdrop-blur dark:border-white/10 dark:shadow-black/35 sm:p-8">
