@@ -54,7 +54,7 @@ export default function Dashboard() {
       case 'processing':
         return 'bg-yellow-100 text-yellow-800'
       case 'review':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-brand-primary/10 text-brand-primary'
       case 'approved':
         return 'bg-green-100 text-green-800'
       default:
@@ -66,10 +66,13 @@ export default function Dashboard() {
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">Projects</h1>
+          <div>
+            <h1 className="text-2xl font-semibold text-app-heading">Projects</h1>
+            <p className="mt-1 text-sm text-app-body">Review detection projects and parking lot boundaries.</p>
+          </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+            className="bg-brand-primary hover:bg-brand-primaryHover text-white px-4 py-2 rounded-md text-sm font-medium shadow-sm"
           >
             New Project
           </button>
@@ -79,7 +82,7 @@ export default function Dashboard() {
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-            className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+            className="border border-black/10 bg-white rounded-md px-3 py-2 text-sm shadow-sm focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/25"
           >
             <option value="">All Statuses</option>
             <option value="pending">Pending</option>
@@ -90,25 +93,25 @@ export default function Dashboard() {
         </div>
 
         {loading ? (
-          <div className="text-center py-12">Loading...</div>
+          <div className="text-center py-12 text-app-body">Loading...</div>
         ) : projects.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow">
-            <p className="text-gray-500">No projects yet. Create one to get started!</p>
+          <div className="text-center py-12 bg-white/95 rounded-lg border border-black/10 shadow-sm">
+            <p className="text-app-body">No projects yet. Create one to get started!</p>
           </div>
         ) : (
           <>
-            <div className="bg-white shadow overflow-hidden sm:rounded-md">
+            <div className="bg-white/95 shadow-sm ring-1 ring-black/10 overflow-hidden sm:rounded-md">
               <ul className="divide-y divide-gray-200">
                 {projects.map((project) => (
                   <li key={project.id}>
-                    <div className="flex items-center hover:bg-gray-50">
+                    <div className="flex items-center hover:bg-brand-primary/5">
                       <button
                         onClick={() => navigate(`/project/${project.id}`)}
                         className="flex-1 text-left"
                       >
                         <div className="px-4 py-4 sm:px-6">
                           <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-blue-600 truncate">
+                            <p className="text-sm font-medium text-brand-primary truncate">
                               {project.name}
                             </p>
                             <div className="ml-2 flex-shrink-0 flex">
@@ -123,11 +126,11 @@ export default function Dashboard() {
                           </div>
                           <div className="mt-2 sm:flex sm:justify-between">
                             <div className="sm:flex">
-                              <p className="flex items-center text-sm text-gray-500">
+                              <p className="flex items-center text-sm text-app-body">
                                 {project.description || 'No description'}
                               </p>
                             </div>
-                            <div className="mt-2 flex items-center text-sm text-gray-500 sm:mt-0">
+                            <div className="mt-2 flex items-center text-sm text-app-body sm:mt-0">
                               <span>{project.polygon_count} polygons</span>
                               <span className="mx-2">|</span>
                               <span>
@@ -144,24 +147,24 @@ export default function Dashboard() {
             </div>
 
             <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-app-body">
                 Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage((p) => p - 1)}
                   disabled={page === 1}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-md disabled:opacity-40 hover:bg-gray-50"
+                  className="px-3 py-1 text-sm border border-black/10 bg-white rounded-md disabled:opacity-40 hover:bg-brand-primary/5"
                 >
                   Previous
                 </button>
-                <span className="px-3 py-1 text-sm text-gray-700">
+                <span className="px-3 py-1 text-sm text-app-body">
                   {page} / {totalPages}
                 </span>
                 <button
                   onClick={() => setPage((p) => p + 1)}
                   disabled={page === totalPages}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-md disabled:opacity-40 hover:bg-gray-50"
+                  className="px-3 py-1 text-sm border border-black/10 bg-white rounded-md disabled:opacity-40 hover:bg-brand-primary/5"
                 >
                   Next
                 </button>

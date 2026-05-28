@@ -84,7 +84,7 @@ export default function Admin() {
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="text-center py-12">Loading...</div>
+        <div className="text-center py-12 text-app-body">Loading...</div>
       </div>
     )
   }
@@ -92,12 +92,15 @@ export default function Admin() {
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-6">User Management</h1>
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-app-heading">User Management</h1>
+          <p className="mt-1 text-sm text-app-body">Invite teammates and manage access to LotMapper.</p>
+        </div>
 
         {isOwner && (
-          <div className="bg-white shadow sm:rounded-md p-4 mb-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-2">Invite by Email</h2>
-            <p className="text-sm text-gray-500 mb-3">
+          <div className="bg-white/95 shadow-sm ring-1 ring-black/10 sm:rounded-md p-4 mb-6">
+            <h2 className="text-lg font-medium text-app-heading mb-2">Invite by Email</h2>
+            <p className="text-sm text-app-body mb-3">
               Sends a signup link directly — the recipient skips the request/approval step.
             </p>
             <form onSubmit={handleInvite} className="flex gap-2 items-start">
@@ -107,12 +110,12 @@ export default function Admin() {
                 placeholder="email@example.com"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/25 focus:border-brand-primary"
               />
               <button
                 type="submit"
                 disabled={inviting}
-                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-brand-primary text-white text-sm font-medium rounded-md hover:bg-brand-primaryHover disabled:opacity-50"
               >
                 {inviting ? 'Sending…' : 'Send Invite'}
               </button>
@@ -131,28 +134,28 @@ export default function Admin() {
         )}
 
         {isOwner && (
-          <p className="text-sm text-gray-500 mb-3">
+          <p className="text-sm text-app-body mb-3">
             Activating a pending request sends the user an email with a signup link.
           </p>
         )}
 
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+        <div className="bg-white/95 shadow-sm ring-1 ring-black/10 overflow-hidden sm:rounded-md">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-brand-primary/5">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-app-body uppercase tracking-wider">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-app-body uppercase tracking-wider">
                   Role
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-app-body uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-app-body uppercase tracking-wider">
                   Created
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-app-body uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -161,7 +164,7 @@ export default function Admin() {
               {users.map((user) => (
                 <tr key={user.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{user.email}</div>
+                    <div className="text-sm font-medium text-app-heading">{user.email}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <select
@@ -171,7 +174,7 @@ export default function Admin() {
                         updating === user.id ||
                         !(isOwner || (isAdmin && user.role !== 'owner'))
                       }
-                      className="text-sm border border-gray-300 rounded px-2 py-1 disabled:opacity-50"
+                      className="text-sm border border-gray-300 rounded px-2 py-1 disabled:opacity-50 focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/25"
                       title={
                         isAdmin && user.role === 'owner'
                           ? 'Only Owners can modify an Owner'
@@ -196,7 +199,7 @@ export default function Admin() {
                       {user.is_active ? 'Active' : 'Pending'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-app-body">
                     {new Date(user.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
