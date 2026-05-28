@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import AuthLayout from '../components/AuthLayout'
 import { authApi } from '../services/api'
 
 export default function ResetPassword() {
@@ -14,17 +15,17 @@ export default function ResetPassword() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8 text-center">
-          <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded">
-            <h3 className="font-bold">Invalid Link</h3>
+      <AuthLayout title="Invalid link" subtitle="This reset link is invalid or has expired.">
+        <div className="space-y-6 text-center">
+          <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-red-700">
+            <h2 className="font-bold">Invalid link</h2>
             <p className="mt-2">This reset link is invalid or has expired.</p>
           </div>
-          <Link to="/forgot-password" className="text-blue-600 hover:text-blue-500">
+          <Link to="/forgot-password" className="font-medium text-auth-primary hover:text-auth-primaryHover">
             Request a new reset link
           </Link>
         </div>
-      </div>
+      </AuthLayout>
     )
   }
 
@@ -57,71 +58,61 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Choose a new password
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Enter and confirm your new password below.
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded">
-              {error}{' '}
-              <Link to="/forgot-password" className="underline">
-                Request a new link
-              </Link>
-            </div>
-          )}
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <label htmlFor="password" className="sr-only">
-                New password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="New password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="confirm-password" className="sr-only">
-                Confirm new password
-              </label>
-              <input
-                id="confirm-password"
-                name="confirm-password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Confirm new password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-            </div>
+    <AuthLayout title="Choose a new password" subtitle="Enter and confirm your new password below.">
+      <form className="space-y-6" onSubmit={handleSubmit}>
+        {error && (
+          <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-red-700">
+            {error}{' '}
+            <Link to="/forgot-password" className="underline">
+              Request a new link
+            </Link>
           </div>
-
+        )}
+        <div className="rounded-md shadow-sm -space-y-px">
           <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {loading ? 'Updating…' : 'Update password'}
-            </button>
+            <label htmlFor="password" className="sr-only">
+              New password
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              required
+              className="relative block w-full rounded-none rounded-t-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:z-10 focus:border-auth-primary focus:outline-none focus:ring-2 focus:ring-auth-primary/25 sm:text-sm"
+              placeholder="New password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
-        </form>
-      </div>
-    </div>
+          <div>
+            <label htmlFor="confirm-password" className="sr-only">
+              Confirm new password
+            </label>
+            <input
+              id="confirm-password"
+              name="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              required
+              className="relative block w-full rounded-none rounded-b-md border border-gray-300 px-3 py-2.5 text-gray-950 placeholder-gray-500 shadow-sm focus:z-10 focus:border-auth-primary focus:outline-none focus:ring-2 focus:ring-auth-primary/25 sm:text-sm"
+              placeholder="Confirm new password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex w-full justify-center rounded-md border border-transparent bg-auth-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-auth-primaryHover focus:outline-none focus:ring-2 focus:ring-auth-accent focus:ring-offset-2 disabled:opacity-50"
+          >
+            {loading ? 'Updating…' : 'Update password'}
+          </button>
+        </div>
+      </form>
+    </AuthLayout>
   )
 }

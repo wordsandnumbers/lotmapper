@@ -89,15 +89,15 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
 
   return (
     <div
-      className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-app-canvas/70 backdrop-blur-sm flex items-center justify-center z-50"
       onClick={handleBackdropClick}
     >
-      <div className="flex flex-col bg-white w-full h-full sm:rounded-lg sm:shadow-xl sm:max-w-6xl sm:h-auto sm:max-h-[95vh] overflow-hidden">
+      <div className="flex flex-col bg-white/95 w-full h-full sm:rounded-lg sm:shadow-xl sm:max-w-6xl sm:h-auto sm:max-h-[95vh] overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-900">Create New Project</h2>
+          <h2 className="text-xl font-semibold text-app-heading">Create New Project</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+            className="text-app-body hover:text-app-heading text-2xl leading-none"
             aria-label="Close"
           >
             &times;
@@ -113,27 +113,27 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-app-heading">
                 Project Name
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-auth-primary/25 focus:border-auth-primary"
                 placeholder="Downtown Area 1"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-app-heading">
                 Description (optional)
               </label>
               <input
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-auth-primary/25 focus:border-auth-primary"
                 placeholder="Parking lots in the downtown business district"
               />
             </div>
@@ -145,8 +145,8 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                   onClick={() => handleTabChange('city')}
                   className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
                     activeTab === 'city'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      ? 'border-auth-accent text-auth-primary'
+                      : 'border-transparent text-gray-500 hover:text-app-heading'
                   }`}
                 >
                   City Search
@@ -156,8 +156,8 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                   onClick={() => handleTabChange('draw')}
                   className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
                     activeTab === 'draw'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      ? 'border-auth-accent text-auth-primary'
+                      : 'border-transparent text-gray-500 hover:text-app-heading'
                   }`}
                 >
                   Draw Area
@@ -177,14 +177,14 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-app-heading hover:bg-auth-primary/5"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitDisabled}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium disabled:opacity-50"
+              className="px-4 py-2 bg-auth-primary hover:bg-auth-primaryHover text-white rounded-md text-sm font-medium disabled:opacity-50"
             >
               {loading ? 'Creating...' : 'Create Project'}
             </button>

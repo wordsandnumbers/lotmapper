@@ -287,16 +287,16 @@ export default function Editor() {
   return (
     <div className="h-[calc(100vh-64px)] flex flex-col sm:flex-row">
       {/* Sidebar */}
-      <div className="w-full sm:w-80 sm:flex-shrink-0 bg-white shadow-lg p-4 overflow-y-auto max-h-[45vh] sm:max-h-none">
+      <div className="w-full sm:w-80 sm:flex-shrink-0 bg-white/95 shadow-lg ring-1 ring-black/10 p-4 overflow-y-auto max-h-[45vh] sm:max-h-none">
         <button
           onClick={() => navigate('/dashboard')}
-          className="text-blue-600 hover:text-blue-800 mb-4 flex items-center"
+          className="text-auth-primary hover:text-auth-primaryHover mb-4 flex items-center"
         >
           &larr; Back to Dashboard
         </button>
 
         <h2 className="text-xl font-semibold mb-2">{project.name}</h2>
-        <p className="text-gray-500 text-sm mb-4">{project.description}</p>
+        <p className="text-app-body text-sm mb-4">{project.description}</p>
 
         <div className="mb-4">
           <span
@@ -304,7 +304,7 @@ export default function Editor() {
               project.status === 'approved'
                 ? 'bg-green-100 text-green-800'
                 : project.status === 'review'
-                ? 'bg-blue-100 text-blue-800'
+                ? 'bg-auth-primary/10 text-auth-primary'
                 : project.status === 'processing'
                 ? 'bg-yellow-100 text-yellow-800'
                 : 'bg-gray-100 text-gray-800'
@@ -320,7 +320,7 @@ export default function Editor() {
             <button
               onClick={handleRunInference}
               disabled={running}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md disabled:opacity-50"
+              className="w-full bg-auth-primary hover:bg-auth-primaryHover text-white px-4 py-2 rounded-md disabled:opacity-50"
             >
               {running ? 'Starting...' : 'Run Detection'}
             </button>
@@ -329,16 +329,16 @@ export default function Editor() {
           {project.status === 'processing' && (
             <div className="py-4">
               <div className="flex items-center mb-2">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2 flex-shrink-0"></div>
-                <p className="text-sm text-gray-700 font-medium">Processing...</p>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-auth-primary mr-2 flex-shrink-0"></div>
+                <p className="text-sm text-app-heading font-medium">Processing...</p>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
                 <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                  className="bg-auth-primary h-2 rounded-full transition-all duration-500"
                   style={{ width: `${inferenceProgress}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-500">{inferenceMessage || 'Queued...'}</p>
+              <p className="text-xs text-app-body">{inferenceMessage || 'Queued...'}</p>
             </div>
           )}
 
@@ -346,7 +346,7 @@ export default function Editor() {
             <>
               <div className="border-t pt-3">
                 <h3 className="font-medium mb-2">Edit Tools</h3>
-                <p className="text-xs text-gray-500 mb-2">
+                <p className="text-xs text-app-body mb-2">
                   Use the drawing tools on the map to edit polygons.
                 </p>
               </div>
@@ -362,13 +362,13 @@ export default function Editor() {
                     className={`w-full px-4 py-2 rounded-md text-sm ${
                       splitMode
                         ? 'bg-red-600 hover:bg-red-700 text-white'
-                        : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                        : 'bg-gray-200 hover:bg-gray-300 text-app-heading'
                     }`}
                   >
                     {splitMode ? 'Cancel Split' : 'Split Polygon'}
                   </button>
                   {splitMode && (
-                    <p className="text-xs text-gray-500 mt-2">
+                    <p className="text-xs text-app-body mt-2">
                       {splitStart
                         ? 'Click to set the end point of the split line'
                         : 'Click on the map to set the start point of the split line'}
@@ -393,7 +393,7 @@ export default function Editor() {
             <button
               onClick={handleSubmitForReview}
               disabled={saving}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md disabled:opacity-50"
+              className="w-full bg-auth-primary hover:bg-auth-primaryHover text-white px-4 py-2 rounded-md disabled:opacity-50"
             >
               Submit for Review
             </button>
@@ -403,7 +403,7 @@ export default function Editor() {
             <div className="border-t pt-3 mt-3">
               {showDeleteConfirm ? (
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-600">Delete this project and all its polygons?</p>
+                  <p className="text-sm text-app-body">Delete this project and all its polygons?</p>
                   <div className="flex gap-2">
                     <button
                       onClick={handleDeleteProject}
@@ -415,7 +415,7 @@ export default function Editor() {
                     <button
                       onClick={() => setShowDeleteConfirm(false)}
                       disabled={deleting}
-                      className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm"
+                      className="flex-1 bg-gray-200 hover:bg-gray-300 text-app-heading px-4 py-2 rounded-md text-sm"
                     >
                       Cancel
                     </button>
@@ -424,7 +424,7 @@ export default function Editor() {
               ) : (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
-                  className="w-full bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-md text-sm"
+                  className="w-full bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-md text-sm"
                 >
                   Delete Project
                 </button>
@@ -434,12 +434,12 @@ export default function Editor() {
         </div>
 
         {/* Polygon count */}
-        <div className="mt-6 text-sm text-gray-500">
+        <div className="mt-6 text-sm text-app-body">
           {polygons?.features.length || 0} polygons detected
         </div>
 
         {saving && (
-          <div className="mt-4 text-sm text-blue-600">Saving changes...</div>
+          <div className="mt-4 text-sm text-auth-primary">Saving changes...</div>
         )}
       </div>
 
