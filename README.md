@@ -26,6 +26,8 @@ A web application for detecting and editing parking lot polygons from satellite 
 
 ## Getting Started
 
+> Working on this project with Claude Code? See [.devcontainer/README.md](.devcontainer/README.md) for the dev container setup (auto mode, isolated environment, persistent auth).
+
 ### Prerequisites
 
 - Docker and Docker Compose
