@@ -7,6 +7,8 @@ ENV APP_VERSION=v${SEMVER}+git-${BUILD_SHA}
 LABEL org.opencontainers.image.revision=${BUILD_SHA}
 LABEL org.opencontainers.image.version=${SEMVER}
 
+ENV UV_LINK_MODE=copy
+
 WORKDIR /app
 
 # Install system dependencies for OpenCV and PostGIS
