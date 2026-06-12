@@ -28,7 +28,7 @@ from app.models.project import Project
 from app.models.polygon import Polygon as PolygonModel
 from app.services.tiles import fetch_tiles_for_bounds, calculate_optimal_zoom, estimate_tile_count
 from app.services.tile_usage import get_current_monthly_count, increment_monthly_count
-from app.services.osm import fetch_osm_roads, fetch_osm_buildings, subtract_features, simplify_polygons
+from app.services.osm import fetch_osm_roads, fetch_osm_buildings, fetch_osm_parking, subtract_features, simplify_polygons
 from app.config import get_settings
 
 logging.basicConfig(level=logging.INFO)
@@ -578,6 +578,32 @@ async def run_inference_for_project(
         # Update project status
         project.status = "review"
         db.commit()
+
+        # Step 9: Fetch OSM parking reference layer (non-fatal if Overpass is down)
+        await _cb(9, 9, 93, "Fetching OSM parking reference data...")
+        try:
+            osm_lots = await fetch_osm_parking(min_lat, min_lng, max_lat, max_lng)
+            osm_clipped = []
+            for p in osm_lots:
+                if p.intersects(boundary_shape):
+                    try:
+                        clipped = p.intersection(boundary_shape)
+                        if not clipped.is_empty:
+                            geoms = list(clipped.geoms) if isinstance(clipped, MultiPolygon) else [clipped]
+                            osm_clipped.extend(g for g in geoms if g.geom_type == "Polygon")
+                    except Exception:
+                        continue
+            for g in osm_clipped:
+                db.add(PolygonModel(
+                    project_id=project_id,
+                    geometry=f"SRID=4326;{g.wkt}",
+                    properties={"source": "osm"},
+                    status="detected",
+                ))
+            db.commit()
+            logger.info(f"  Saved {len(osm_clipped)} OSM parking reference polygons")
+        except Exception as e:
+            logger.warning(f"  OSM parking step failed (non-fatal): {e}")
 
         total_time = time.time() - start_time
         logger.info(f"=" * 50)
