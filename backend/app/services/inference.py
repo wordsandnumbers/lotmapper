@@ -337,15 +337,21 @@ async def run_inference_for_project(
     project_id: str,
     user_id: str,
     progress_callback: Optional[Callable] = None,
+    cancelled_check: Optional[Callable] = None,
 ):
     """
     Run the full inference pipeline for a project.
     Called as a background task or from the worker.
     progress_callback(step, total, progress_pct, message) is awaited after each step.
+    cancelled_check is an async () -> bool called at each step boundary.
     """
     async def _cb(step: int, total: int, pct: int, msg: str) -> None:
         if progress_callback:
             await progress_callback(step, total, pct, msg)
+
+    async def _check() -> None:
+        if cancelled_check and await cancelled_check():
+            raise asyncio.CancelledError(f"Inference cancelled for project {project_id}")
 
     import time
     start_time = time.time()
@@ -381,6 +387,7 @@ async def run_inference_for_project(
         min_lng, max_lng = min(lngs), max(lngs)
         min_lat, max_lat = min(lats), max(lats)
 
+        await _check()
         logger.info(f"[Step 1/8] Fetching satellite tiles...")
         logger.info(f"  Bounds: {min_lat:.4f}, {min_lng:.4f} to {max_lat:.4f}, {max_lng:.4f}")
         await _cb(1, 8, 5, "Fetching satellite tiles...")
@@ -421,6 +428,7 @@ async def run_inference_for_project(
         logger.info(f"    Bottom-left (h,0): lon={lons[-1,0]:.6f}, lat={lats_array[-1,0]:.6f}")
         logger.info(f"    Bottom-right (h,w): lon={lons[-1,-1]:.6f}, lat={lats_array[-1,-1]:.6f}")
 
+        await _check()
         # Split into tiles
         logger.info(f"[Step 2/8] Splitting image into 512x512 tiles...")
         tiles, rows, cols, img_h, img_w = split_image(image_array)
@@ -453,6 +461,7 @@ async def run_inference_for_project(
         logger.info(f"  Tile pre-filter: {len(active_tiles)}/{len(tiles)} tiles intersect boundary "
                     f"({skipped} skipped)")
 
+        await _check()
         # Run inference in a thread pool so the event loop stays free for other requests
         logger.info(f"[Step 3/8] Running model inference on {len(active_tiles)} tiles...")
         inference_start = time.time()
@@ -478,6 +487,7 @@ async def run_inference_for_project(
         for i, pred in zip(active_indices, active_predictions):
             predictions[i] = pred
 
+        await _check()
         # Stitch predictions
         logger.info(f"[Step 4/8] Stitching predictions...")
         h, w = image_array.shape[:2]
@@ -512,6 +522,7 @@ async def run_inference_for_project(
         logger.info(f"  Converted {len(coord_polygons)} polygons to coordinates")
         await _cb(6, 8, 75, "Converting to geographic coordinates...")
 
+        await _check()
         # Step 7/8: Remove roads and buildings (OSM post-processing)
         logger.info(f"[Step 7/8] Fetching OSM roads and buildings for post-processing...")
         await _cb(7, 8, 80, "Fetching OSM data...")

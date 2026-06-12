@@ -79,17 +79,23 @@ async def main():
                         })
                         db.commit()
 
+                    async def is_cancelled() -> bool:
+                        j = db.query(InferenceJob).filter(InferenceJob.id == job_id).first()
+                        return j is None or j.status == "cancelled"
+
                     await run_inference_for_project(
                         project_id=project_id,
                         user_id=user_id,
                         progress_callback=progress_cb,
+                        cancelled_check=is_cancelled,
                     )
 
                     job = db.query(InferenceJob).filter(InferenceJob.id == job_id).first()
-                    job.status = "completed"
-                    job.progress = 100
-                    job.completed_at = datetime.utcnow()
-                    db.commit()
+                    if job:
+                        job.status = "completed"
+                        job.progress = 100
+                        job.completed_at = datetime.utcnow()
+                        db.commit()
 
                     await _send_progress({
                         "project_id": project_id,
@@ -98,6 +104,15 @@ async def main():
                         "message": "Inference complete",
                     })
                     logger.info(f"[Worker] Job {job_id} completed")
+
+                except asyncio.CancelledError:
+                    logger.info(f"[Worker] Job {job_id} cancelled")
+                    await _send_progress({
+                        "project_id": project_id,
+                        "status": "cancelled",
+                        "progress": 0,
+                        "message": "Inference cancelled",
+                    })
 
                 except Exception as e:
                     logger.error(f"[Worker] Job {job_id} failed: {e}")

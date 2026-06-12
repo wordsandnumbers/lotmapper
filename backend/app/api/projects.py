@@ -18,6 +18,8 @@ from app.schemas.project import (
     ProjectListResponse,
 )
 from app.api.deps import get_current_active_user, user_can_access_project
+from app.models.inference_job import InferenceJob
+from app.services import sse
 
 router = APIRouter()
 
@@ -196,6 +198,25 @@ async def delete_project(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
         )
+
+    # Cancel any active inference job so the worker stops cleanly
+    active_job = (
+        db.query(InferenceJob)
+        .filter(
+            InferenceJob.project_id == project_id,
+            InferenceJob.status.in_(["queued", "running"]),
+        )
+        .first()
+    )
+    if active_job:
+        active_job.status = "cancelled"
+        db.commit()
+        await sse.broadcast(str(project_id), {
+            "project_id": str(project_id),
+            "status": "cancelled",
+            "progress": 0,
+            "message": "Project deleted",
+        })
 
     db.delete(project)
     db.commit()

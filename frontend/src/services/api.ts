@@ -149,6 +149,10 @@ export const inferenceApi = {
     const response = await api.post(`/inference/run/${projectId}`)
     return response.data
   },
+  cancel: async (projectId: string) => {
+    const response = await api.post(`/inference/cancel/${projectId}`)
+    return response.data
+  },
   status: async (projectId: string) => {
     const response = await api.get(`/inference/status/${projectId}`)
     return response.data

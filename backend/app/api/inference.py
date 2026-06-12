@@ -107,6 +107,42 @@ async def stream_inference_progress(
     )
 
 
+@router.post("/cancel/{project_id}")
+async def cancel_inference(
+    project_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Cancel a queued or running inference job for a project."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project or not user_can_access_project(current_user, project):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    job = (
+        db.query(InferenceJob)
+        .filter(
+            InferenceJob.project_id == project_id,
+            InferenceJob.status.in_(["queued", "running"]),
+        )
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active inference job")
+
+    job.status = "cancelled"
+    project.status = "pending"
+    db.commit()
+
+    await sse.broadcast(str(project_id), {
+        "project_id": str(project_id),
+        "status": "cancelled",
+        "progress": 0,
+        "message": "Inference cancelled",
+    })
+
+    return {"message": "Inference cancelled"}
+
+
 @router.get("/status/{project_id}")
 async def get_inference_status(
     project_id: UUID,
