@@ -2,37 +2,38 @@ import { useState } from 'react'
 import type { Geometry } from 'geojson'
 import { projectsApi } from '../services/api'
 import CitySearchTab from './CitySearchTab'
-import DrawAreaTab from './DrawAreaTab'
 
 interface Props {
   onClose: () => void
   onCreated: () => void
 }
 
-type Tab = 'city' | 'draw'
-
 export default function CreateProjectModal({ onClose, onCreated }: Props) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [activeTab, setActiveTab] = useState<Tab>('city')
-  const [bounds, setBounds] = useState<{
-    min_lat: number
-    min_lng: number
-    max_lat: number
-    max_lng: number
-  } | null>(null)
   const [boundsPolygon, setBoundsPolygon] = useState<Geometry | null>(null)
+  const [city, setCity] = useState('')
+  const [state, setState] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleTabChange = (tab: Tab) => {
-    setActiveTab(tab)
-    if (tab === 'city') {
-      setBounds(null)
-    } else {
-      setBoundsPolygon(null)
+  const handleBoundarySelected = (
+    polygon: Geometry | null,
+    selectedCity?: string,
+    selectedState?: string,
+    zoneName?: string,
+  ) => {
+    setBoundsPolygon(polygon)
+    if (polygon && selectedCity && selectedState) {
+      setCity(selectedCity)
+      setState(selectedState)
+      if (!name.trim() && zoneName) {
+        setName(zoneName)
+      }
+    } else if (!polygon) {
+      setCity('')
+      setState('')
     }
-    setError('')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,49 +44,32 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
       setError('Project name is required')
       return
     }
-
-    if (activeTab === 'draw' && !bounds) {
-      setError('Please draw a bounding box on the map')
-      return
-    }
-
-    if (activeTab === 'city' && !boundsPolygon) {
+    if (!boundsPolygon) {
       setError('Please find and confirm a city boundary')
       return
     }
 
     setLoading(true)
-
     try {
-      if (activeTab === 'city' && boundsPolygon) {
-        await projectsApi.create({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          bounds_polygon: boundsPolygon,
-        })
-      } else {
-        await projectsApi.create({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          bounds: bounds!,
-        })
-      }
+      await projectsApi.create({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        bounds_polygon: boundsPolygon,
+        city: city || undefined,
+        state: state || undefined,
+      })
       onCreated()
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || 'Failed to create project')
+      const e = err as { response?: { data?: { detail?: string } } }
+      setError(e.response?.data?.detail || 'Failed to create project')
     } finally {
       setLoading(false)
     }
   }
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
+    if (e.target === e.currentTarget) onClose()
   }
-
-  const submitDisabled = loading || (activeTab === 'draw' ? !bounds : !boundsPolygon)
 
   return (
     <div
@@ -112,6 +96,9 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
               </div>
             )}
 
+            {/* City search is the primary entry point */}
+            <CitySearchTab onBoundarySelected={handleBoundarySelected} />
+
             <div>
               <label className="block text-sm font-medium text-app-heading">
                 Project Name
@@ -121,7 +108,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary/25 focus:border-brand-primary"
-                placeholder="Downtown Area 1"
+                placeholder="Portland, OR — Downtown Mixed Use"
               />
             </div>
 
@@ -137,40 +124,6 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
                 placeholder="Parking lots in the downtown business district"
               />
             </div>
-
-            <div>
-              <div className="flex border-b border-gray-200 mb-4">
-                <button
-                  type="button"
-                  onClick={() => handleTabChange('city')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-                    activeTab === 'city'
-                      ? 'border-brand-accent text-brand-primary'
-                      : 'border-transparent text-gray-500 hover:text-app-heading'
-                  }`}
-                >
-                  City Search
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTabChange('draw')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-                    activeTab === 'draw'
-                      ? 'border-brand-accent text-brand-primary'
-                      : 'border-transparent text-gray-500 hover:text-app-heading'
-                  }`}
-                >
-                  Draw Area
-                </button>
-              </div>
-
-              {activeTab === 'city' && (
-                <CitySearchTab onBoundarySelected={setBoundsPolygon} />
-              )}
-              {activeTab === 'draw' && (
-                <DrawAreaTab onBoundsChange={setBounds} />
-              )}
-            </div>
           </div>
 
           <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
@@ -183,7 +136,7 @@ export default function CreateProjectModal({ onClose, onCreated }: Props) {
             </button>
             <button
               type="submit"
-              disabled={submitDisabled}
+              disabled={loading || !boundsPolygon}
               className="px-4 py-2 bg-brand-primary hover:bg-brand-primaryHover text-white rounded-md text-sm font-medium disabled:opacity-50"
             >
               {loading ? 'Creating...' : 'Create Project'}

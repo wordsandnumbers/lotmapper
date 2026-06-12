@@ -91,6 +91,8 @@ export const projectsApi = {
     description?: string
     bounds?: { min_lat: number; min_lng: number; max_lat: number; max_lng: number }
     bounds_polygon?: object
+    city?: string
+    state?: string
   }) => {
     const response = await api.post('/projects', data)
     return response.data
