@@ -29,6 +29,7 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None  # pending, processing, review, approved
+    bounds_polygon: Optional[dict] = None  # GeoJSON geometry for boundary update
 
 
 class ProjectResponse(BaseModel):

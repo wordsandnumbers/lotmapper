@@ -95,7 +95,7 @@ export const projectsApi = {
     const response = await api.post('/projects', data)
     return response.data
   },
-  update: async (id: string, data: { name?: string; description?: string; status?: string }) => {
+  update: async (id: string, data: { name?: string; description?: string; status?: string; bounds_polygon?: object }) => {
     const response = await api.patch(`/projects/${id}`, data)
     return response.data
   },

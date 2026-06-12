@@ -1,11 +1,62 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
+import '@geoman-io/leaflet-geoman-free'
+import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import { citySearchStreamUrl } from '../services/api'
 import { useAuthStore } from '../store/auth'
 
+function BoundaryEditController({
+  geoJsonRef,
+  active,
+  onUpdate,
+}: {
+  geoJsonRef: React.RefObject<L.GeoJSON | null>
+  active: boolean
+  onUpdate: (geom: GeoJSON.Geometry) => void
+}) {
+  const map = useMap()
+  const onUpdateRef = useRef(onUpdate)
+  onUpdateRef.current = onUpdate
+
+  useEffect(() => {
+    const geoJsonLayer = geoJsonRef.current
+    if (!geoJsonLayer) return
+    const layers = geoJsonLayer.getLayers()
+    if (layers.length === 0) return
+    const layer = layers[0]
+    const pm = (layer as unknown as { pm?: { enable: (o?: object) => void; disable: () => void } }).pm
+    if (!pm) return
+
+    if (active) {
+      pm.enable({ allowSelfIntersection: false })
+      const handleUpdate = (e: unknown) => {
+        const ev = e as { layer: L.Layer }
+        const geo = (ev.layer as L.Polygon).toGeoJSON()
+        onUpdateRef.current(geo.geometry)
+      }
+      layer.on('pm:update', handleUpdate)
+      return () => {
+        pm.disable()
+        layer.off('pm:update', handleUpdate)
+      }
+    } else {
+      pm.disable()
+    }
+  // geoJsonRef is a stable ref — intentionally omitted from deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, map])
+
+  return null
+}
+
 interface CitySearchTabProps {
-  onBoundarySelected: (polygon: GeoJSON.Geometry | null) => void
+  onBoundarySelected: (
+    polygon: GeoJSON.Geometry | null,
+    city?: string,
+    state?: string,
+    zoneName?: string,
+  ) => void
 }
 
 const STATE_NAME_TO_ABBR: Record<string, string> = {
@@ -85,6 +136,10 @@ export default function CitySearchTab({ onBoundarySelected }: CitySearchTabProps
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set())
   const [boundsPolygon, setBoundsPolygon] = useState<GeoJSON.Geometry | null>(null)
   const [selectedCandidateName, setSelectedCandidateName] = useState<string | null>(null)
+  const [editingBoundary, setEditingBoundary] = useState(false)
+  const boundaryLayerRef = useRef<L.GeoJSON | null>(null)
+  // Tracks latest geoman edits without re-keying the GeoJSON layer
+  const liveGeomRef = useRef<GeoJSON.Geometry | null>(null)
 
   const [cityQuery, setCityQuery] = useState('')
   const [suggestions, setSuggestions] = useState<CitySuggestion[]>([])
@@ -272,6 +327,8 @@ export default function CitySearchTab({ onBoundarySelected }: CitySearchTabProps
     setSuggestions([])
     setShowSuggestions(false)
     setResolveError('')
+    setEditingBoundary(false)
+    liveGeomRef.current = null
     onBoundarySelected(null)
   }
 
@@ -452,18 +509,36 @@ export default function CitySearchTab({ onBoundarySelected }: CitySearchTabProps
         </>
       ) : (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-sm text-green-600 font-medium">
-              Boundary confirmed: {selectedCandidateName}
+              {selectedCandidateName}
             </span>
-            <button
-              type="button"
-              onClick={handleSearchAgain}
-              className="px-3 py-1 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded text-sm"
-            >
-              Change
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingBoundary(v => !v)}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  editingBoundary
+                    ? 'bg-brand-primary text-white'
+                    : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {editingBoundary ? 'Done Editing' : 'Edit Boundary'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSearchAgain}
+                className="px-3 py-1 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded text-sm"
+              >
+                Change
+              </button>
+            </div>
           </div>
+          {editingBoundary && (
+            <p className="text-xs text-gray-500">
+              Drag vertices to adjust the boundary. Click a segment midpoint to add a vertex.
+            </p>
+          )}
           <div className="h-[20rem] sm:h-[28rem] border border-gray-300 rounded-md overflow-hidden">
             <MapContainer
               center={[39.8283, -98.5795]}
@@ -474,10 +549,20 @@ export default function CitySearchTab({ onBoundarySelected }: CitySearchTabProps
                 attribution='&copy; <a href="https://maps.google.com">Google Maps</a>'
                 url="/api/v1/tiles/{z}/{x}/{y}"
               />
+              {/* Stable key — does not change on geoman edits so the layer reference persists */}
               <GeoJSON
-                key={JSON.stringify(boundsPolygon)}
+                key="confirmed-boundary"
+                ref={(ref) => { boundaryLayerRef.current = ref }}
                 data={boundsPolygon as GeoJSON.GeoJsonObject}
                 style={resolvedPolygonStyle}
+              />
+              <BoundaryEditController
+                geoJsonRef={boundaryLayerRef}
+                active={editingBoundary}
+                onUpdate={(geom) => {
+                  liveGeomRef.current = geom
+                  onBoundarySelected(geom, city, stateAbbr, selectedCandidateName || undefined)
+                }}
               />
               <FitToPolygon geojson={boundsPolygon} />
             </MapContainer>
