@@ -95,6 +95,13 @@ jobs:
 
             # Pull and restart app services (not db/rabbitmq/caddy)
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend worker frontend
+
+            # Remove orphaned containers left behind by an interrupted recreate
+            # (docker compose renames the old container to a hash-prefixed temp
+            # name before removing it; if that step is interrupted, the temp
+            # container lingers and collides with the next recreate)
+            docker ps -a --format '{{.Names}}' | grep -E '^[0-9a-f]+_lotmapper-(backend|worker|frontend)-1$' | xargs -r docker rm -f
+
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend worker frontend
 
             # Run migrations
