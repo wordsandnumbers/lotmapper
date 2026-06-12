@@ -13,6 +13,8 @@ class Project(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    city = Column(String(100), nullable=True)
+    state = Column(String(2), nullable=True)
     bounds = Column(Geometry("GEOMETRY", srid=4326), nullable=False)
     status = Column(
         String(50), default="pending"

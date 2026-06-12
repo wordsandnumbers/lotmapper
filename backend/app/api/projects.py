@@ -73,6 +73,8 @@ async def create_project(
         name=project_data.name,
         description=project_data.description,
         bounds=bounds_wkt,
+        city=project_data.city,
+        state=project_data.state,
         created_by=current_user.id,
         status="pending",
     )

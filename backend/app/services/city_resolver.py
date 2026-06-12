@@ -124,6 +124,29 @@ def _extract_name(props: dict) -> Optional[str]:
     return None
 
 
+DESCRIPTION_FIELDS = (
+    "description", "DESCRIPTION",
+    "long_name", "LONG_NAME", "full_name", "FULL_NAME",
+    "longdescription", "LongDescription",
+    "zone_type", "ZONE_TYPE",
+    "use_desc", "USE_DESC", "use_type", "USE_TYPE",
+    "zone_desc", "ZONE_DESC", "zone_name", "ZONE_NAME",
+    "district_type", "DISTRICT_TYPE",
+    "overlay", "OVERLAY",
+)
+_DESCRIPTION_FIELDS_LOWER = tuple(dict.fromkeys(f.lower() for f in DESCRIPTION_FIELDS))
+
+
+def _extract_description(props: dict, name: str) -> Optional[str]:
+    """Extract a secondary description from feature properties, distinct from the name."""
+    lower_props = {k.lower(): v for k, v in props.items()}
+    for field in _DESCRIPTION_FIELDS_LOWER:
+        val = lower_props.get(field)
+        if val and isinstance(val, str) and val.strip() and val.strip() != name:
+            return val.strip()
+    return None
+
+
 def _detect_zone_field(features: List[dict]) -> Optional[str]:
     """Return the first property key that matches a known zone field name."""
     if not features:
@@ -498,7 +521,8 @@ async def _query_service_for_candidates(
             score = 1
         else:
             score = 0
-        raw.append({"name": name, "geometry": geom, "score": score, "_area": area})
+        description = _extract_description(props, name)
+        raw.append({"name": name, "description": description, "geometry": geom, "score": score, "_area": area})
 
     if not raw:
         return []
@@ -519,6 +543,7 @@ async def _query_service_for_candidates(
                 best = max(group, key=lambda r: r["score"])
                 candidate = {
                     "name": best["name"],
+                    "description": best.get("description"),
                     "geometry": mapping(merged),
                     "score": best["score"],
                     "_area": merged.area,
@@ -819,7 +844,7 @@ async def get_candidates(
     if not candidates:
         await _emit(progress_cb, "No boundaries found, using approximate downtown area")
         geom = await _fallback_city_buffer(city, state)
-        return [{"name": "Estimated downtown (800m radius)", "geometry": geom, "score": -1, "source": "fallback"}]
+        return [{"name": "Estimated downtown (800m radius)", "description": None, "geometry": geom, "score": -1, "source": "fallback"}]
 
     # Deduplicate by name, sort: score desc then for zone codes (score≥2) area desc
     # (larger zone = primary downtown), for others area asc (more focused first).
@@ -833,7 +858,13 @@ async def get_candidates(
 
     deduped.sort(key=lambda c: (-c["score"], -c["_area"] if c["score"] >= 2 else c["_area"]))
     return [
-        {"name": c["name"], "geometry": c["geometry"], "score": c["score"], "source": c.get("source", "arcgis_hub")}
+        {
+            "name": c["name"],
+            "description": c.get("description"),
+            "geometry": c["geometry"],
+            "score": c["score"],
+            "source": c.get("source", "arcgis_hub"),
+        }
         for c in deduped[:10]
     ]
 
