@@ -93,8 +93,16 @@ jobs:
               echo "IMAGE_TAG=git-${SHORT_SHA}" >> .env
             fi
 
-            # Pull and restart app services (not db/rabbitmq/caddy)
+            # Pull new images (not db/rabbitmq/caddy)
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend worker frontend
+
+            # Run migrations in a one-off container using the new image, before
+            # recreating the long-running services. This keeps the migration off
+            # the critical path of the backend/worker startup (which load a large
+            # CV model into memory and were previously racing with `alembic exec`
+            # for RAM, causing OOM kills) and ensures the schema is ready before
+            # the new app code starts.
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm -T --no-deps backend alembic upgrade head
 
             # Remove orphaned containers left behind by an interrupted recreate
             # (docker compose renames the old container to a hash-prefixed temp
@@ -102,10 +110,8 @@ jobs:
             # container lingers and collides with the next recreate)
             docker ps -a --format '{{.Names}}' | grep -E '^[0-9a-f]+_lotmapper-(backend|worker|frontend)-1$' | xargs -r docker rm -f
 
+            # Restart app services on the new images
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps backend worker frontend
-
-            # Run migrations
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T backend alembic upgrade head
 
             # Reclaim space from prior image versions now that new ones are live
             docker image prune -af
