@@ -1,12 +1,6 @@
 FROM python:3.11-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-ARG BUILD_SHA=dev
-ARG SEMVER=0.0.0
-ENV APP_VERSION=v${SEMVER}+git-${BUILD_SHA}
-LABEL org.opencontainers.image.revision=${BUILD_SHA}
-LABEL org.opencontainers.image.version=${SEMVER}
-
 ENV UV_LINK_MODE=copy
 
 WORKDIR /app
@@ -27,6 +21,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Copy application code
 COPY . .
+
+# Version metadata (placed after deps so it doesn't bust the layer cache above)
+ARG BUILD_SHA=dev
+ARG SEMVER=0.0.0
+ENV APP_VERSION=v${SEMVER}+git-${BUILD_SHA}
+LABEL org.opencontainers.image.revision=${BUILD_SHA}
+LABEL org.opencontainers.image.version=${SEMVER}
 
 # Expose port
 EXPOSE 8000
