@@ -128,6 +128,7 @@ export default function CitySearchTab({ onBoundarySelected }: CitySearchTabProps
   const [resolveError, setResolveError] = useState('')
   const [candidates, setCandidates] = useState<Array<{
     name: string
+    description?: string | null
     geometry: GeoJSON.Geometry
     score: number
     source: string
@@ -313,8 +314,8 @@ export default function CitySearchTab({ onBoundarySelected }: CitySearchTabProps
     const names = Array.from(selectedIndices).map(i => candidates[i].name).join(' + ')
     setBoundsPolygon(combinedGeometry)
     setSelectedCandidateName(names)
-    onBoundarySelected(combinedGeometry)
-  }, [candidates, selectedIndices, combinedGeometry, onBoundarySelected])
+    onBoundarySelected(combinedGeometry, city, stateAbbr, names)
+  }, [candidates, selectedIndices, combinedGeometry, city, stateAbbr, onBoundarySelected])
 
   const handleSearchAgain = () => {
     setCandidates(null)
@@ -458,6 +459,9 @@ export default function CitySearchTab({ onBoundarySelected }: CitySearchTabProps
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-gray-800 leading-tight break-words">{c.name}</p>
+                        {c.description && c.description !== c.name && (
+                          <p className="text-xs text-gray-500 mt-0.5 leading-tight break-words">{c.description}</p>
+                        )}
                         <p className="text-xs text-gray-400 mt-0.5">{sourceLabel(c.source)}</p>
                       </div>
                     </div>

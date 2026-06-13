@@ -17,6 +17,8 @@ class ProjectCreate(BaseModel):
     description: Optional[str] = None
     bounds: Optional[BoundingBox] = None        # manual draw → rectangle
     bounds_polygon: Optional[dict] = None       # city resolver → arbitrary polygon
+    city: Optional[str] = None
+    state: Optional[str] = None
 
     @model_validator(mode="after")
     def require_one_bounds(self):
@@ -38,6 +40,8 @@ class ProjectResponse(BaseModel):
     description: Optional[str]
     bounds: dict  # GeoJSON polygon
     status: str
+    city: Optional[str] = None
+    state: Optional[str] = None
     created_by: Optional[UUID]
     approved_by: Optional[UUID]
     created_at: datetime
