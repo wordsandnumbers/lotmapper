@@ -14,15 +14,18 @@ from app.config import get_settings
 from app.services.tile_cache import get_cached_tile, cache_tile
 
 
-# Module-level session cache
-_session_cache: dict = {"token": None, "expiry": 0}
+# Module-level session caches keyed by map type
+_session_caches: dict = {
+    "satellite": {"token": None, "expiry": 0},
+    "hybrid": {"token": None, "expiry": 0},
+}
 
 
-async def _create_google_maps_session() -> str:
-    """Create a new Google Maps session token."""
+async def _create_google_maps_session(map_type: str = "satellite") -> str:
+    """Create a new Google Maps session token for the given map type."""
     settings = get_settings()
     url = f"https://tile.googleapis.com/v1/createSession?key={settings.google_maps_api_key}"
-    body = {"mapType": "satellite", "language": "en-US", "region": "US"}
+    body = {"mapType": map_type, "language": "en-US", "region": "US"}
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(url, json=body)
         if not response.is_success:
@@ -32,16 +35,18 @@ async def _create_google_maps_session() -> str:
         data = response.json()
     token = data["session"]
     expiry = data.get("expiry", int(time.time()) + 3600)
-    _session_cache["token"] = token
-    _session_cache["expiry"] = int(expiry)
+    cache = _session_caches.setdefault(map_type, {"token": None, "expiry": 0})
+    cache["token"] = token
+    cache["expiry"] = int(expiry)
     return token
 
 
-async def _get_current_session() -> str:
-    """Return a valid session token, refreshing if within 60s of expiry."""
-    if _session_cache["token"] is None or time.time() >= _session_cache["expiry"] - 60:
-        return await _create_google_maps_session()
-    return _session_cache["token"]
+async def _get_current_session(map_type: str = "satellite") -> str:
+    """Return a valid session token for the given map type, refreshing if near expiry."""
+    cache = _session_caches.setdefault(map_type, {"token": None, "expiry": 0})
+    if cache["token"] is None or time.time() >= cache["expiry"] - 60:
+        return await _create_google_maps_session(map_type)
+    return cache["token"]
 
 
 async def get_google_maps_tile_url() -> str:

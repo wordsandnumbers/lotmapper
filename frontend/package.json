@@ -13,6 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@geoman-io/leaflet-geoman-free": "^2.19.3",
     "@turf/turf": "^6.5.0",
     "axios": "^1.6.7",
     "leaflet": "^1.9.4",

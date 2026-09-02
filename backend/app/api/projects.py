@@ -158,6 +158,10 @@ async def update_project(
         project.name = project_update.name
     if project_update.description is not None:
         project.description = project_update.description
+    if project_update.bounds_polygon is not None:
+        from shapely.geometry import shape as shapely_shape
+        poly = shapely_shape(project_update.bounds_polygon)
+        project.bounds = f"SRID=4326;{poly.wkt}"
     if project_update.status is not None:
         if project_update.status == "approved" and current_user.role not in (
             "admin",

@@ -1,7 +1,6 @@
 {
     "permissions": {
         "allow": [
-            "Docker compose:*",
             "Bash(curl:*)",
             "Bash(docker compose:*)",
             "WebSearch"
