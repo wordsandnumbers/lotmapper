@@ -41,6 +41,10 @@ NAME_FIELDS = (
     "downtown_districts", "DOWNTOWN_DISTRICTS",
     "area_name", "AREA_NAME",
     "comm_name", "COMM_NAME",           # community name
+    "cpname", "CPNAME",                 # San Diego community plan area name
+    "cp_name", "CP_NAME",
+    "community", "COMMUNITY",
+    "community_name", "COMMUNITY_NAME",
     "placename", "PLACENAME",
     "spa_name", "SPA_NAME",              # Cleveland Strategic Planning Area
     "common_name", "CommonName",         # Lubbock Design Districts
@@ -741,6 +745,7 @@ async def get_candidates(
         f"{city} {state} neighborhood boundary",
         f"{city} {state} neighborhoods",
         f"{city} {state} village planning",  # Phoenix-style urban villages
+        f"{city} {state} community plan areas",  # San Diego-style community plan areas
         f"{city} {state} zoning districts",
         f"{city} {state} zoning",
     ]

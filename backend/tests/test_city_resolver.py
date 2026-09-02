@@ -22,6 +22,7 @@ CITIES_WITH_DATA = [
     ("Minneapolis", "MN"),
     ("Atlanta", "GA"),
     ("Longview", "TX"),
+    ("San Diego", "CA"),
 ]
 
 # Smaller cities with no public neighborhood GIS data — fallback is expected and correct
@@ -126,4 +127,39 @@ async def test_city_zone_code_ranked_first(city, state, expected_code):
     assert top["score"] == 2, (
         f"{city}, {state}: expected top candidate to be a zone code (score=2) "
         f"but got score={top['score']} name={top['name']!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Named-boundary regression tests
+#
+# Cities whose downtown comes from a named boundary feature rather than a
+# zone code.  These pin dataset-specific quirks (unusual name fields, search
+# terms that don't match the generic "neighborhood" phrasing).
+# ---------------------------------------------------------------------------
+
+CITIES_WITH_EXPECTED_BOUNDARY = [
+    # (city, state, expected_name)
+    # San Diego publishes its downtown as CPNAME="DOWNTOWN" in the "City of
+    # San Diego Community Planning Areas" layer.  That dataset only surfaces
+    # under a "community plan areas" query, and its name field (CPNAME) is
+    # not one of the common neighborhood field names.
+    ("San Diego", "CA", "DOWNTOWN"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("city,state,expected_name", CITIES_WITH_EXPECTED_BOUNDARY)
+async def test_city_boundary_ranked_first(city, state, expected_name):
+    """The expected downtown boundary should be the top-ranked candidate."""
+    candidates = await get_candidates(city, state)
+    assert candidates, f"{city}, {state}: returned empty list"
+    top = candidates[0]
+    assert top["name"].upper() == expected_name.upper(), (
+        f"{city}, {state}: expected top candidate {expected_name!r} but got "
+        f"{top['name']!r} (score={top['score']}). "
+        f"All: {[c['name'] for c in candidates]}"
+    )
+    assert top["score"] >= 1, (
+        f"{city}, {state}: expected {expected_name!r} to score >= 1, got {top['score']}"
     )
